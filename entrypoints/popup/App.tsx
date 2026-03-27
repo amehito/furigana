@@ -1,27 +1,7 @@
 import { useState, useEffect } from 'react';
-import { browser } from 'wxt/browser'; // 改为使用 browser 对象
+import { browser } from 'wxt/browser';
+import { DEFAULT_SETTINGS, type TooltipSettings } from '../../types/settings';
 import './App.css';
-
-// 定义设置接口
-interface TooltipSettings {
-  position: 'top' | 'bottom' | 'left' | 'right';
-  fontSize: number;
-  textColor: string;
-  backgroundColor: string;
-  bgOpacity: number;    // 新增：背景透明度 (0-100)
-  rubySize: number;     // 新增：注音大小 (em 或 px)
-  rubyColor: string;    // 新增：注音颜色
-}
-
-const DEFAULT_SETTINGS: TooltipSettings = {
-  position: 'top',
-  fontSize: 14,
-  textColor: '#ffffff',
-  backgroundColor: '#333333',
-  bgOpacity: 90,        // 默认 90% 不透明
-  rubySize: 0.6,        // 默认 0.6em
-  rubyColor: '#ffeb3b', // 默认黄色注音
-};
 
 function App() {
   const [settings, setSettings] = useState<TooltipSettings>(DEFAULT_SETTINGS);
@@ -29,10 +9,9 @@ function App() {
   // 1. 初始化时从 Storage 读取配置
   useEffect(() => {
     const loadSettings = async () => {
-      // browser.storage.local.get 返回的是一个 key-value 对象
       const result = await browser.storage.local.get('tooltipSettings');
       if (result.tooltipSettings) {
-        setSettings(result.tooltipSettings);
+        setSettings({ ...DEFAULT_SETTINGS, ...result.tooltipSettings });
       }
     };
     loadSettings();
@@ -42,7 +21,6 @@ function App() {
   const updateSetting = async (key: keyof TooltipSettings, value: string | number) => {
     const newSettings = { ...settings, [key]: value };
     setSettings(newSettings);
-    // 使用原生的 set 语法：{ [key]: value }
     await browser.storage.local.set({ tooltipSettings: newSettings });
   };
 

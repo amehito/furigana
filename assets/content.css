@@ -1,13 +1,121 @@
 #my-floating-popup {
   position: absolute;
-  z-index: 999999; /* 确保在最前面 */
+  z-index: 999999;
   background: #333;
   color: white;
   padding: 8px 12px;
   border-radius: 6px;
   font-size: 14px;
   pointer-events: auto;
-  transform: translateX(-50%); /* 居中对齐 */
+  transform: translateX(-50%);
   box-shadow: 0 4px 12px rgba(0,0,0,0.2);
   white-space: nowrap;
+  max-width: min(360px, calc(100vw - 24px));
+}
+
+#my-floating-popup .content {
+  white-space: normal;
+  line-height: 1.5;
+}
+
+#my-floating-popup .tooltip-panel {
+  min-width: 220px;
+  max-width: 320px;
+  white-space: normal;
+}
+
+#my-floating-popup .tooltip-body {
+  margin-bottom: 10px;
+  line-height: 1.6;
+}
+
+#my-floating-popup .word-card {
+  min-width: 220px;
+  max-width: 320px;
+  padding: 12px;
+  border-radius: 14px;
+  background:
+    linear-gradient(160deg, rgba(255, 248, 225, 0.12), rgba(255, 255, 255, 0.04)),
+    rgba(24, 27, 32, 0.94);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 14px 40px rgba(15, 23, 42, 0.28);
+  white-space: normal;
+  backdrop-filter: blur(14px);
+}
+
+#my-floating-popup .word-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+#my-floating-popup .word-card-word {
+  font-size: 1.1em;
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+#my-floating-popup .word-card-tag {
+  flex-shrink: 0;
+  padding: 3px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  line-height: 1.2;
+  background: rgba(255, 213, 79, 0.14);
+  color: #ffe082;
+  border: 1px solid rgba(255, 213, 79, 0.28);
+}
+
+#my-floating-popup .card-furigana {
+  margin-bottom: 12px;
+  font-size: 1.05em;
+  line-height: 1.5;
+}
+
+#my-floating-popup .word-card-actions {
+  display: flex;
+  gap: 8px;
+}
+
+#my-floating-popup .tooltip-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+#my-floating-popup .word-card-btn {
+  flex: 1;
+  border: 0;
+  border-radius: 10px;
+  padding: 8px 10px;
+  font: inherit;
+  color: #fff;
+  cursor: pointer;
+  transition: transform 120ms ease, opacity 120ms ease, background-color 120ms ease;
+}
+
+#my-floating-popup .word-card-btn:hover {
+  transform: translateY(-1px);
+}
+
+#my-floating-popup .word-card-btn:active {
+  transform: translateY(0);
+}
+
+#my-floating-popup .word-card-btn.audio-btn {
+  background: rgba(59, 130, 246, 0.28);
+}
+
+#my-floating-popup .tooltip-actions .word-card-btn.audio-btn {
+  flex: 0 0 auto;
+  min-width: 112px;
+}
+
+#my-floating-popup .word-card-btn.favorite-btn {
+  background: rgba(244, 114, 182, 0.24);
+}
+
+#my-floating-popup .word-card-btn.favorite-btn.is-active {
+  background: rgba(245, 158, 11, 0.3);
 }

@@ -1,5 +1,6 @@
 import * as wanakana from 'wanakana';
-import cityMap from './city'
+import { browser } from 'wxt/browser';
+import cityMap from './city';
 
 interface KanjiEntry {
   readings_on: string[];
@@ -9,10 +10,15 @@ interface KanjiEntry {
 
 
 type KanjiDict = Record<string, KanjiEntry>;
+type EntityType = 'place' | 'person' | 'place-or-person' | null;
 
 class FuriganaService {
   private dict: KanjiDict = {};
-  private cityDict: Record<string, string> = cityMap; // 新的城市/人名字典
+  private cityDict: Record<string, string> = cityMap;
+  private familyNames = new Set([
+    '田中', '佐藤', '鈴木', '高橋', '渡辺', '伊藤', '山本', '中村', '小林', '加藤',
+    '吉田', '山田', '佐々木', '山口', '松本', '井上', '木村', '林', '清水', '山崎',
+  ]);
   private isLoaded = false;
   private initPromise: Promise<void> | null = null;
 
@@ -22,7 +28,7 @@ class FuriganaService {
 
     this.initPromise = (async () => {
       try {
-        const response = await fetch(chrome.runtime.getURL('json/kanji-jouyou.json'));
+        const response = await fetch(browser.runtime.getURL('/json/kanji-jouyou.json'));
         this.dict = await response.json();
         this.isLoaded = true;
       } catch (err) {
@@ -50,6 +56,23 @@ class FuriganaService {
       }
     }
     return html;
+  }
+
+  getEntityType(text: string): EntityType {
+    const normalized = text.trim();
+    if (!normalized) return null;
+
+    const isPlace = Boolean(this.cityDict[normalized]);
+    const isPerson = this.familyNames.has(normalized);
+
+    if (isPlace && isPerson) return 'place-or-person';
+    if (isPlace) return 'place';
+    if (isPerson) return 'person';
+    return null;
+  }
+
+  isPlaceOrName(text: string): boolean {
+    return this.getEntityType(text) !== null;
   }
 
   private processSegment(segment: string): string {

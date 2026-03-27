@@ -1,9 +1,12 @@
 import '../assets/content.css';
 import { furiganaService } from '../util/common';
 import { browser } from 'wxt/browser';
+import { DEFAULT_SETTINGS, type TooltipSettings } from '../types/settings';
 
 const divName = 'my-floating-popup';
 const styleId = 'furigana-dynamic-style';
+const MAX_TOOLTIP_CHARS = 100;
+const WORD_CARD_CHARS = 7;
 
 export default defineContentScript({
   matches: ['<all_urls>'],
@@ -16,20 +19,27 @@ export default defineContentScript({
     overlay.style.zIndex = '999999';
     document.body.appendChild(overlay);
 
-    // --- 核心：应用样式的函数 ---
-    const applyStyles = (settings: any) => {
-      if (!settings) return;
+    const chromeLike = globalThis as typeof globalThis & {
+      chrome?: {
+        tts?: {
+          stop?: () => void;
+          speak?: (text: string, options?: Record<string, unknown>) => void;
+        };
+      };
+    };
 
-      // A. 设置外层浮层基础样式
+    const loadTooltipSettings = async (): Promise<TooltipSettings> => {
+      const data = await browser.storage.local.get('tooltipSettings');
+      return { ...DEFAULT_SETTINGS, ...(data.tooltipSettings ?? {}) };
+    };
+
+    const applyStyles = (settings: TooltipSettings) => {
       overlay.style.backgroundColor = settings.backgroundColor;
       overlay.style.fontSize = `${settings.fontSize}px`;
       overlay.style.color = settings.textColor;
-      
-      // 使用 opacity 会让整个插件变透明（包括文字）
-      // 如果你只想背景透明，建议在 Popup 用 rgba，这里暂用整体透明度
-      overlay.style.opacity = (settings.bgOpacity / 100).toString();
+      overlay.style.padding = `${settings.padding}px ${Math.max(settings.padding + 4, 12)}px`;
+      overlay.style.opacity = '1';
 
-      // B. 动态注入 CSS 来控制 ruby 和 rt 标签
       let styleTag = document.getElementById(styleId) as HTMLStyleElement;
       if (!styleTag) {
         styleTag = document.createElement('style');
@@ -50,52 +60,52 @@ export default defineContentScript({
       `;
     };
 
-    // 2. 初始化：立即从 storage 读取一次配置
-    const data = await browser.storage.local.get('tooltipSettings');
-    applyStyles(data.tooltipSettings);
+    applyStyles(await loadTooltipSettings());
 
-    // 3. 监听：实时更新样式
     browser.storage.onChanged.addListener((changes, areaName) => {
       if (areaName === 'local' && changes.tooltipSettings) {
-        applyStyles(changes.tooltipSettings.newValue);
+        applyStyles({ ...DEFAULT_SETTINGS, ...(changes.tooltipSettings.newValue ?? {}) });
       }
     });
 
-    // 4. 监听鼠标抬起
     document.addEventListener('mouseup', async (e) => {
       const selection = window.getSelection();
-      const selectedText = selection?.toString().trim();
+      const selectedText = selection?.toString().trim() || '';
 
-      if (selectedText && selectedText.length > 0) {
-        const range = selection!.getRangeAt(0);
-        const rect = range.getBoundingClientRect();
-        
-        const data = await browser.storage.local.get('tooltipSettings');
-        const settings = data.tooltipSettings;
-        
-        // 确保显示时样式是最新的
-        applyStyles(settings);
+      if (!selectedText || !selection || selection.rangeCount === 0) {
+        overlay.style.display = 'none';
+        return;
+      }
 
-        // 位置计算逻辑
-        let top = rect.top + window.scrollY - 50; // 稍微多偏移一点
-        let left = rect.left + window.scrollX + rect.width / 2;
+      if (selectedText.length > MAX_TOOLTIP_CHARS) {
+        overlay.style.display = 'none';
+        return;
+      }
 
-        if (settings?.position === 'bottom') {
-          top = rect.bottom + window.scrollY + 10;
+      const range = selection.getRangeAt(0);
+      const rect = range.getBoundingClientRect();
+      const settings = await loadTooltipSettings();
+      applyStyles(settings);
+
+      let top = rect.top + window.scrollY - 50;
+      let left = rect.left + window.scrollX + rect.width / 2;
+      if (settings?.position === 'bottom') top = rect.bottom + window.scrollY + 10;
+      if (settings?.position === 'left') left = rect.left + window.scrollX - 10;
+      if (settings?.position === 'right') left = rect.right + window.scrollX + 10;
+
+      overlay.style.left = `${left}px`;
+      overlay.style.top = `${top}px`;
+      overlay.style.transform = 'translateX(-50%)';
+      overlay.style.display = 'block';
+
+      try {
+        if (selectedText.length < WORD_CARD_CHARS) {
+          await renderWordCard(selectedText);
+        } else {
+          await renderTooltipWithAudio(selectedText);
         }
-
-        overlay.style.left = `${left}px`;
-        overlay.style.top = `${top}px`;
-        // 添加水平居中对齐，防止边缘切断
-        overlay.style.transform = 'translateX(-50%)';
-        overlay.style.display = 'block';
-
-        try {
-          const html = await furiganaService.convert(selectedText);
-          overlay.innerHTML = `<div class="content">${html}</div>`;
-        } catch (err) {
-          overlay.innerHTML = `<div class="error">转换失败</div>`;
-        }
+      } catch (err) {
+        overlay.innerHTML = `<div class="error">转换失败</div>`;
       }
     });
 
@@ -106,5 +116,104 @@ export default defineContentScript({
         overlay.style.display = 'none';
       }
     });
+
+    const getFavorites = async (): Promise<string[]> => {
+      const data = await browser.storage.local.get('favorites');
+      return Array.isArray(data.favorites) ? data.favorites : [];
+    };
+
+    const setFavorites = async (list: string[]) => {
+      await browser.storage.local.set({ favorites: list });
+    };
+
+    const isFavorite = async (word: string) => {
+      const list = await getFavorites();
+      return list.includes(word);
+    };
+
+    const toggleFavorite = async (word: string) => {
+      const list = await getFavorites();
+      const exists = list.includes(word);
+      const next = exists ? list.filter((it) => it !== word) : [...list, word];
+      await setFavorites(next);
+      return !exists;
+    };
+
+    const playAudio = (text: string) => {
+      const tts = chromeLike.chrome?.tts;
+
+      if (tts?.speak) {
+        tts.stop?.();
+        tts.speak(text, { lang: 'ja-JP', rate: 0.9 });
+      } else if (window.speechSynthesis) {
+        window.speechSynthesis.cancel();
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.lang = 'ja-JP';
+        utterance.rate = 0.9;
+        window.speechSynthesis.speak(utterance);
+      } else {
+        console.warn('无可用 TTS');
+      }
+    };
+
+    const renderTooltipWithAudio = async (text: string) => {
+      const html = await furiganaService.convert(text);
+
+      overlay.innerHTML = `
+        <div class="tooltip-panel">
+          <div class="tooltip-body content">${html}</div>
+          <div class="tooltip-actions">
+            <button class="word-card-btn audio-btn" type="button">播放音频</button>
+          </div>
+        </div>
+      `;
+
+      overlay.querySelector<HTMLButtonElement>('.audio-btn')?.addEventListener('click', () => {
+        playAudio(text);
+      });
+    };
+
+    const renderWordCard = async (text: string) => {
+      const rubyHtml = await furiganaService.convert(text);
+      const entityType = furiganaService.getEntityType(text);
+      const fav = await isFavorite(text);
+      const tagLabel = entityType === 'place'
+        ? '地名'
+        : entityType === 'person'
+          ? '人名'
+          : entityType === 'place-or-person'
+            ? '地名/人名'
+            : '词卡';
+
+      overlay.innerHTML = `
+        <div class="word-card">
+          <div class="word-card-header">
+            <strong class="word-card-word">${text}</strong>
+            <span class="word-card-tag">${tagLabel}</span>
+          </div>
+          <div class="card-furigana">
+            ${rubyHtml}
+          </div>
+          <div class="word-card-actions">
+            <button class="word-card-btn audio-btn" type="button">播放音频</button>
+            <button class="word-card-btn favorite-btn ${fav ? 'is-active' : ''}" type="button">${fav ? '已收藏' : '添加收藏'}</button>
+          </div>
+        </div>
+      `;
+
+      overlay.querySelector<HTMLButtonElement>('.audio-btn')?.addEventListener('click', () => {
+        playAudio(text);
+      });
+
+      overlay.querySelector<HTMLButtonElement>('.favorite-btn')?.addEventListener('click', async (e) => {
+        e.preventDefault();
+        const nowFav = await toggleFavorite(text);
+        const btn = overlay.querySelector<HTMLButtonElement>('.favorite-btn');
+        if (btn) {
+          btn.textContent = nowFav ? '已收藏' : '添加收藏';
+          btn.classList.toggle('is-active', nowFav);
+        }
+      });
+    };
   },
 });
