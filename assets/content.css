@@ -1,0 +1,13 @@
+#my-floating-popup {
+  position: absolute;
+  z-index: 999999; /* 确保在最前面 */
+  background: #333;
+  color: white;
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 14px;
+  pointer-events: auto;
+  transform: translateX(-50%); /* 居中对齐 */
+  box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+  white-space: nowrap;
+}
