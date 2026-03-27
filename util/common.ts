@@ -1,6 +1,23 @@
 import * as wanakana from 'wanakana';
 import { browser } from 'wxt/browser';
-import { KANJI_FIXED_READING_MAP, NUMERIC_COUNTER_READING_MAP, JAPAN_CITY_MAP } from './specials';
+import {
+  ALL_KANJI_PATTERN,
+  COUNTER_PUN_DIGITS,
+  COUNTER_SOKUON_DIGITS,
+  DEFAULT_CONTEXT,
+  DIGIT_READINGS,
+  FAMILY_NAMES,
+  JAPAN_CITY_MAP,
+  KANJI_FIXED_READING_MAP,
+  KANJI_PATTERN,
+  KUNYOMI_TABLE,
+  LARGE_NUMBER_UNITS,
+  NUMERIC_COUNTER_PATTERN,
+  NUMERIC_COUNTER_READING_MAP,
+  OKURIGANA_PATTERN,
+  SPECIAL_HUNDREDS,
+  SPECIAL_THOUSANDS,
+} from './specials';
 
 interface KanjiEntry {
   readings_on: string[];
@@ -20,11 +37,6 @@ type RemoteOverride = {
 };
 type NumericCounterConfig = typeof NUMERIC_COUNTER_READING_MAP;
 
-const DEFAULT_CONTEXT: ConvertContext = { prev: '', next: '' };
-const KANJI_PATTERN = /[\u4E00-\u9FFF]/;
-const ALL_KANJI_PATTERN = /^[\u4E00-\u9FFF]+$/;
-const OKURIGANA_PATTERN = /^([\u4E00-\u9FFF]+)([ぁ-ん]+)$/;
-
 class FuriganaProcessor {
   private readonly segmenter = new Intl.Segmenter('ja-JP', { granularity: 'word' });
   private readonly entityMap: Map<string, string>;
@@ -32,20 +44,9 @@ class FuriganaProcessor {
   private readonly fixedReadingKeys: string[];
   private readonly numericCounterConfig: NumericCounterConfig;
   private overridesCache: RemoteOverride[] = [];
+  private sortedOverridesCache: RemoteOverride[] = [];
   private overridesPromise: Promise<RemoteOverride[]> | null = null;
   private overridesLoaded = false;
-  private readonly kunyomiTable: Record<string, string[]> = {
-    行く: ['いく'],
-    行う: ['おこなう'],
-    食べる: ['たべる'],
-    見る: ['みる'],
-    下: ['した', 'くだ', 'さ'],
-    人: ['ひと', 'じん', 'にん'],
-    日: ['ひ', 'にち', 'じつ'],
-    生: ['い', 'う', 'せい'],
-    上: ['うえ', 'あ', 'じょう'],
-    中: ['なか', 'ちゅう'],
-  };
 
   constructor(
     private readonly dict: KanjiDict,
@@ -57,15 +58,11 @@ class FuriganaProcessor {
     this.fixedReadingMap = new Map(Object.entries(fixedReadings));
     this.fixedReadingKeys = Object.keys(fixedReadings).sort((a, b) => b.length - a.length);
     this.numericCounterConfig = numericCounterConfig;
-    this.entityMap = new Map(Object.entries({
-      瑞安: 'ずいあん',
-      新宿: 'しんじゅく',
-      ...cityDict,
-    }));
+    this.entityMap = new Map(Object.entries(cityDict));
 
     browser.storage.onChanged.addListener((changes, areaName) => {
       if (areaName === 'local' && changes.remote_overrides) {
-        this.overridesCache = this.normalizeOverrides(changes.remote_overrides.newValue);
+        this.setOverridesCache(changes.remote_overrides.newValue);
         this.overridesLoaded = true;
         this.overridesPromise = Promise.resolve(this.overridesCache);
       }
@@ -101,11 +98,10 @@ class FuriganaProcessor {
         continue;
       }
 
-      const iterator = this.segmenter.segment(text.slice(cursor))[Symbol.iterator]();
-      const nextSegment = iterator.next();
-      if (nextSegment.done) break;
+      const nextSegment = this.getNextSegment(text, cursor);
+      if (!nextSegment) break;
 
-      const { segment, isWordLike } = nextSegment.value;
+      const { segment, isWordLike } = nextSegment;
       const segmentIndex = text.indexOf(segment, cursor);
       cursor = Math.max(cursor, segmentIndex) + segment.length;
 
@@ -173,9 +169,7 @@ class FuriganaProcessor {
     context: ConvertContext,
     overrides: RemoteOverride[],
   ): { text: string; reading: string } | null {
-    const sortedOverrides = [...overrides].sort((a, b) => b.text.length - a.text.length);
-
-    for (const item of sortedOverrides) {
+    for (const item of this.sortedOverridesCache.length ? this.sortedOverridesCache : overrides) {
       if (!text.startsWith(item.text, cursor)) continue;
 
       const localContext = this.createSegmentContext(text, item.text, cursor, context);
@@ -198,7 +192,7 @@ class FuriganaProcessor {
   }
 
   private matchNumericCounterAt(text: string, cursor: number): { text: string; reading: string } | null {
-    const matched = text.slice(cursor).match(/^(\d+)(歳|才|人|日|時|分|月|年|回|階|本|枚|匹|円)/);
+    const matched = text.slice(cursor).match(NUMERIC_COUNTER_PATTERN);
     if (!matched) return null;
 
     const expression = matched[0];
@@ -259,10 +253,10 @@ class FuriganaProcessor {
     const lastTwoDigits = number % 100;
     const lastDigit = number % 10;
 
-    if (lastTwoDigits === 0 || [0, 1, 6, 8].includes(lastDigit)) {
+    if (lastTwoDigits === 0 || COUNTER_SOKUON_DIGITS.includes(lastDigit)) {
       return `${this.replaceTrailingForSokuon(baseReading)}ぷん`;
     }
-    if ([3, 4, 9].includes(lastDigit)) {
+    if (COUNTER_PUN_DIGITS.includes(lastDigit)) {
       return `${baseReading}ぷん`;
     }
     return `${baseReading}ふん`;
@@ -272,7 +266,7 @@ class FuriganaProcessor {
     const lastTwoDigits = number % 100;
     const lastDigit = number % 10;
 
-    if (lastTwoDigits === 0 || [0, 1, 6, 8].includes(lastDigit)) {
+    if (lastTwoDigits === 0 || COUNTER_SOKUON_DIGITS.includes(lastDigit)) {
       return `${this.replaceTrailingForSokuon(baseReading)}かい`;
     }
     return `${baseReading}かい`;
@@ -283,7 +277,7 @@ class FuriganaProcessor {
     const lastDigit = number % 10;
 
     if (lastDigit === 3) return `${baseReading}がい`;
-    if (lastTwoDigits === 0 || [0, 1, 6, 8].includes(lastDigit)) {
+    if (lastTwoDigits === 0 || COUNTER_SOKUON_DIGITS.includes(lastDigit)) {
       return `${this.replaceTrailingForSokuon(baseReading)}かい`;
     }
     return `${baseReading}かい`;
@@ -293,7 +287,7 @@ class FuriganaProcessor {
     const lastTwoDigits = number % 100;
     const lastDigit = number % 10;
 
-    if (lastTwoDigits === 0 || [0, 1, 6, 8].includes(lastDigit)) {
+    if (lastTwoDigits === 0 || COUNTER_SOKUON_DIGITS.includes(lastDigit)) {
       return `${this.replaceTrailingForSokuon(baseReading)}ぽん`;
     }
     if (lastDigit === 3) return `${baseReading}ぼん`;
@@ -304,7 +298,7 @@ class FuriganaProcessor {
     const lastTwoDigits = number % 100;
     const lastDigit = number % 10;
 
-    if (lastTwoDigits === 0 || [0, 1, 6, 8].includes(lastDigit)) {
+    if (lastTwoDigits === 0 || COUNTER_SOKUON_DIGITS.includes(lastDigit)) {
       return `${this.replaceTrailingForSokuon(baseReading)}ぴき`;
     }
     if (lastDigit === 3) return `${baseReading}びき`;
@@ -322,7 +316,6 @@ class FuriganaProcessor {
     if (!Number.isFinite(number) || number < 0) return null;
     if (number === 0) return 'ぜろ';
 
-    const largeUnits = ['', 'まん', 'おく', 'ちょう'];
     const groups: string[] = [];
     let current = number;
     let unitIndex = 0;
@@ -330,7 +323,7 @@ class FuriganaProcessor {
     while (current > 0) {
       const group = current % 10000;
       if (group > 0) {
-        groups.unshift(`${this.convertUnder10000(group)}${largeUnits[unitIndex]}`);
+        groups.unshift(`${this.convertUnder10000(group)}${LARGE_NUMBER_UNITS[unitIndex]}`);
       }
       current = Math.floor(current / 10000);
       unitIndex += 1;
@@ -357,37 +350,32 @@ class FuriganaProcessor {
     if (value === 0) return '';
 
     if (place === 'one') {
-      return ['','いち','に','さん','よん','ご','ろく','なな','はち','きゅう'][value];
+      return DIGIT_READINGS[value];
     }
 
     if (place === 'ten') {
       if (value === 1) return 'じゅう';
-      return `${['','いち','に','さん','よん','ご','ろく','なな','はち','きゅう'][value]}じゅう`;
+      return `${DIGIT_READINGS[value]}じゅう`;
     }
 
     if (place === 'hundred') {
-      if (value === 1) return 'ひゃく';
-      if (value === 3) return 'さんびゃく';
-      if (value === 6) return 'ろっぴゃく';
-      if (value === 8) return 'はっぴゃく';
-      return `${['','いち','に','さん','よん','ご','ろく','なな','はち','きゅう'][value]}ひゃく`;
+      if (SPECIAL_HUNDREDS[value]) return SPECIAL_HUNDREDS[value];
+      return `${DIGIT_READINGS[value]}ひゃく`;
     }
 
-    if (value === 1) return 'せん';
-    if (value === 3) return 'さんぜん';
-    if (value === 8) return 'はっせん';
-    return `${['','いち','に','さん','よん','ご','ろく','なな','はち','きゅう'][value]}せん`;
+    if (SPECIAL_THOUSANDS[value]) return SPECIAL_THOUSANDS[value];
+    return `${DIGIT_READINGS[value]}せん`;
   }
 
   private resolveOkurigana(text: string): string | null {
     const okuriganaMatch = text.match(OKURIGANA_PATTERN);
     if (!okuriganaMatch) return null;
 
-    const directMatch = this.kunyomiTable[text]?.[0];
+    const directMatch = KUNYOMI_TABLE[text]?.[0];
     if (directMatch) return directMatch;
 
     const [, kanjiPart, kanaPart] = okuriganaMatch;
-    const baseEntry = this.kunyomiTable[kanjiPart]?.[0];
+    const baseEntry = KUNYOMI_TABLE[kanjiPart]?.[0];
     if (!baseEntry) return null;
     return `${baseEntry}${kanaPart}`;
   }
@@ -410,7 +398,7 @@ class FuriganaProcessor {
 
   private resolvePolyphonicKanji(text: string): string | null {
     if (text.length !== 1) return null;
-    return this.kunyomiTable[text]?.[0] || null;
+    return KUNYOMI_TABLE[text]?.[0] || null;
   }
 
   private async getRemoteOverrides(): Promise<RemoteOverride[]> {
@@ -419,13 +407,13 @@ class FuriganaProcessor {
 
     this.overridesPromise = browser.storage.local.get('remote_overrides')
       .then((data) => {
-        this.overridesCache = this.normalizeOverrides(data.remote_overrides);
+        this.setOverridesCache(data.remote_overrides);
         this.overridesLoaded = true;
         return this.overridesCache;
       })
       .catch((error) => {
         console.error('读取 remote_overrides 失败:', error);
-        this.overridesCache = [];
+        this.setOverridesCache([]);
         this.overridesLoaded = true;
         return this.overridesCache;
       });
@@ -444,6 +432,17 @@ class FuriganaProcessor {
         typeof (item as RemoteOverride).reading === 'string',
       );
     });
+  }
+
+  private setOverridesCache(value: unknown) {
+    this.overridesCache = this.normalizeOverrides(value);
+    this.sortedOverridesCache = [...this.overridesCache].sort((a, b) => b.text.length - a.text.length);
+  }
+
+  private getNextSegment(text: string, cursor: number) {
+    const iterator = this.segmenter.segment(text.slice(cursor))[Symbol.iterator]();
+    const nextSegment = iterator.next();
+    return nextSegment.done ? null : nextSegment.value;
   }
 
   private createSegmentContext(
@@ -466,10 +465,7 @@ class FuriganaProcessor {
 class FuriganaService {
   private dict: KanjiDict = {};
   private cityDict: Record<string, string> = JAPAN_CITY_MAP;
-  private familyNames = new Set([
-    '田中', '佐藤', '鈴木', '高橋', '渡辺', '伊藤', '山本', '中村', '小林', '加藤',
-    '吉田', '山田', '佐々木', '山口', '松本', '井上', '木村', '林', '清水', '山崎',
-  ]);
+  private familyNames = new Set(FAMILY_NAMES);
   private isLoaded = false;
   private initPromise: Promise<void> | null = null;
   private processor: FuriganaProcessor | null = null;
