@@ -7,6 +7,7 @@ const divName = 'my-floating-popup';
 const styleId = 'furigana-dynamic-style';
 const MAX_TOOLTIP_CHARS = 100;
 const WORD_CARD_CHARS = 7;
+type SelectionContext = { prev: string; next: string };
 
 export default defineContentScript({
   matches: ['<all_urls>'],
@@ -98,11 +99,13 @@ export default defineContentScript({
       overlay.style.transform = 'translateX(-50%)';
       overlay.style.display = 'block';
 
+      const selectionContext = getSelectionContext(range);
+
       try {
         if (selectedText.length < WORD_CARD_CHARS) {
-          await renderWordCard(selectedText);
+          await renderWordCard(selectedText, selectionContext);
         } else {
-          await renderTooltipWithAudio(selectedText);
+          await renderTooltipWithAudio(selectedText, selectionContext);
         }
       } catch (err) {
         overlay.innerHTML = `<div class="error">转换失败</div>`;
@@ -156,8 +159,8 @@ export default defineContentScript({
       }
     };
 
-    const renderTooltipWithAudio = async (text: string) => {
-      const html = await furiganaService.convert(text);
+    const renderTooltipWithAudio = async (text: string, context: SelectionContext) => {
+      const html = await furiganaService.convert(text, context);
 
       overlay.innerHTML = `
         <div class="tooltip-panel">
@@ -173,8 +176,8 @@ export default defineContentScript({
       });
     };
 
-    const renderWordCard = async (text: string) => {
-      const rubyHtml = await furiganaService.convert(text);
+    const renderWordCard = async (text: string, context: SelectionContext) => {
+      const rubyHtml = await furiganaService.convert(text, context);
       const entityType = furiganaService.getEntityType(text);
       const fav = await isFavorite(text);
       const tagLabel = entityType === 'place'
@@ -214,6 +217,16 @@ export default defineContentScript({
           btn.classList.toggle('is-active', nowFav);
         }
       });
+    };
+
+    const getSelectionContext = (range: Range): SelectionContext => {
+      const startText = range.startContainer.textContent ?? '';
+      const endText = range.endContainer.textContent ?? '';
+
+      return {
+        prev: startText.slice(Math.max(0, range.startOffset - 5), range.startOffset),
+        next: endText.slice(range.endOffset, range.endOffset + 5),
+      };
     };
   },
 });
