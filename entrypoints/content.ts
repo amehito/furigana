@@ -7,6 +7,7 @@ const divName = 'my-floating-popup';
 const styleId = 'furigana-dynamic-style';
 const MAX_TOOLTIP_CHARS = 100;
 const WORD_CARD_CHARS = 7;
+const KANJI_PATTERN = /[\u4E00-\u9FFF]/;
 type SelectionContext = { prev: string; next: string };
 
 export default defineContentScript({
@@ -74,6 +75,11 @@ export default defineContentScript({
       const selectedText = selection?.toString().trim() || '';
 
       if (!selectedText || !selection || selection.rangeCount === 0) {
+        overlay.style.display = 'none';
+        return;
+      }
+
+      if (!KANJI_PATTERN.test(selectedText)) {
         overlay.style.display = 'none';
         return;
       }
