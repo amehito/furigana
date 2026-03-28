@@ -19,3 +19,22 @@ export const DEFAULT_SETTINGS: TooltipSettings = {
   rubySize: 0.6,
   rubyColor: '#ffeb3b',
 };
+
+export type TranslatorEngine = 'google' | 'deepl' | 'bing' | 'papago';
+export type SiteAccessMode = 'blacklist' | 'whitelist';
+
+export interface ExtensionSettings {
+  translatorEngine: TranslatorEngine;
+  siteAccessMode: SiteAccessMode;
+  blacklist: string[];
+  whitelist: string[];
+  pausedHosts: string[];
+}
+
+export const DEFAULT_EXTENSION_SETTINGS: ExtensionSettings = {
+  translatorEngine: 'google',
+  siteAccessMode: 'blacklist',
+  blacklist: [],
+  whitelist: [],
+  pausedHosts: [],
+};

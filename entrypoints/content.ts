@@ -1,14 +1,32 @@
 import '../assets/content.css';
+import React from 'react';
+import { createRoot } from 'react-dom/client';
 import { furiganaService } from '../util/common';
 import { browser } from 'wxt/browser';
-import { DEFAULT_SETTINGS, type TooltipSettings } from '../types/settings';
+import {
+  DEFAULT_EXTENSION_SETTINGS,
+  DEFAULT_SETTINGS,
+  type ExtensionSettings,
+  type TooltipSettings,
+  type TranslatorEngine,
+} from '../types/settings';
+import { ErrorReportModal } from './components/ErrorReportModal';
 
 const divName = 'my-floating-popup';
 const styleId = 'furigana-dynamic-style';
+const reportModalId = 'weicheng-report-root';
 const MAX_TOOLTIP_CHARS = 100;
 const WORD_CARD_CHARS = 7;
 const KANJI_PATTERN = /[\u4E00-\u9FFF]/;
 type SelectionContext = { prev: string; next: string };
+type ReportPayload = { word: string; reportContext: string; currentFurigana: string };
+
+const TRANSLATOR_URL_BUILDERS: Record<TranslatorEngine, (text: string) => string> = {
+  google: (text) => `https://translate.google.com/?sl=ja&tl=zh-CN&text=${encodeURIComponent(text)}&op=translate`,
+  deepl: (text) => `https://www.deepl.com/translator#ja/zh-hans/${encodeURIComponent(text)}`,
+  bing: (text) => `https://www.bing.com/translator?from=ja&to=zh-Hans&text=${encodeURIComponent(text)}`,
+  papago: (text) => `https://papago.naver.com/?sk=ja&tk=zh-CN&st=${encodeURIComponent(text)}`,
+};
 
 export default defineContentScript({
   matches: ['<all_urls>'],
@@ -20,6 +38,11 @@ export default defineContentScript({
     overlay.style.display = 'none';
     overlay.style.zIndex = '999999';
     document.body.appendChild(overlay);
+
+    const reportModalContainer = document.createElement('div');
+    reportModalContainer.id = reportModalId;
+    document.body.appendChild(reportModalContainer);
+    const reportModalRoot = createRoot(reportModalContainer);
 
     const chromeLike = globalThis as typeof globalThis & {
       chrome?: {
@@ -33,6 +56,25 @@ export default defineContentScript({
     const loadTooltipSettings = async (): Promise<TooltipSettings> => {
       const data = await browser.storage.local.get('tooltipSettings');
       return { ...DEFAULT_SETTINGS, ...(data.tooltipSettings ?? {}) };
+    };
+
+    let extensionSettings: ExtensionSettings = DEFAULT_EXTENSION_SETTINGS;
+    const loadExtensionSettings = async (): Promise<ExtensionSettings> => {
+      const data = await browser.storage.local.get('extensionSettings');
+      extensionSettings = { ...DEFAULT_EXTENSION_SETTINGS, ...(data.extensionSettings ?? {}) };
+      return extensionSettings;
+    };
+
+    const renderReportModal = (payload: ReportPayload | null) => {
+      reportModalRoot.render(
+        React.createElement(ErrorReportModal, {
+          isOpen: Boolean(payload),
+          onClose: () => renderReportModal(null),
+          word: payload?.word ?? '',
+          reportContext: payload?.reportContext ?? '',
+          currentFurigana: payload?.currentFurigana ?? '',
+        }),
+      );
     };
 
     const applyStyles = (settings: TooltipSettings) => {
@@ -63,10 +105,17 @@ export default defineContentScript({
     };
 
     applyStyles(await loadTooltipSettings());
+    await loadExtensionSettings();
 
     browser.storage.onChanged.addListener((changes, areaName) => {
-      if (areaName === 'local' && changes.tooltipSettings) {
+      if (areaName !== 'local') return;
+
+      if (changes.tooltipSettings) {
         applyStyles({ ...DEFAULT_SETTINGS, ...(changes.tooltipSettings.newValue ?? {}) });
+      }
+
+      if (changes.extensionSettings) {
+        extensionSettings = { ...DEFAULT_EXTENSION_SETTINGS, ...(changes.extensionSettings.newValue ?? {}) };
       }
     });
 
@@ -75,6 +124,11 @@ export default defineContentScript({
       const selectedText = selection?.toString().trim() || '';
 
       if (!selectedText || !selection || selection.rangeCount === 0) {
+        overlay.style.display = 'none';
+        return;
+      }
+
+      if (!isExtensionEnabledOnCurrentPage(extensionSettings)) {
         overlay.style.display = 'none';
         return;
       }
@@ -173,12 +227,26 @@ export default defineContentScript({
           <div class="tooltip-body content">${html}</div>
           <div class="tooltip-actions">
             <button class="word-card-btn audio-btn" type="button">播放音频</button>
+            <button class="word-card-btn translate-btn" type="button">翻译</button>
+            <button class="word-card-btn report-btn" type="button">🚩</button>
           </div>
         </div>
       `;
 
       overlay.querySelector<HTMLButtonElement>('.audio-btn')?.addEventListener('click', () => {
         playAudio(text);
+      });
+
+      overlay.querySelector<HTMLButtonElement>('.translate-btn')?.addEventListener('click', () => {
+        openTranslator(text, extensionSettings.translatorEngine);
+      });
+
+      overlay.querySelector<HTMLButtonElement>('.report-btn')?.addEventListener('click', () => {
+        renderReportModal({
+          word: text,
+          reportContext: formatReportContext(text, context),
+          currentFurigana: html,
+        });
       });
     };
 
@@ -205,13 +273,19 @@ export default defineContentScript({
           </div>
           <div class="word-card-actions">
             <button class="word-card-btn audio-btn" type="button">播放音频</button>
+            <button class="word-card-btn translate-btn" type="button">翻译</button>
             <button class="word-card-btn favorite-btn ${fav ? 'is-active' : ''}" type="button">${fav ? '已收藏' : '添加收藏'}</button>
+            <button class="word-card-btn report-btn" type="button">🚩</button>
           </div>
         </div>
       `;
 
       overlay.querySelector<HTMLButtonElement>('.audio-btn')?.addEventListener('click', () => {
         playAudio(text);
+      });
+
+      overlay.querySelector<HTMLButtonElement>('.translate-btn')?.addEventListener('click', () => {
+        openTranslator(text, extensionSettings.translatorEngine);
       });
 
       overlay.querySelector<HTMLButtonElement>('.favorite-btn')?.addEventListener('click', async (e) => {
@@ -222,6 +296,14 @@ export default defineContentScript({
           btn.textContent = nowFav ? '已收藏' : '添加收藏';
           btn.classList.toggle('is-active', nowFav);
         }
+      });
+
+      overlay.querySelector<HTMLButtonElement>('.report-btn')?.addEventListener('click', () => {
+        renderReportModal({
+          word: text,
+          reportContext: formatReportContext(text, context),
+          currentFurigana: rubyHtml,
+        });
       });
     };
 
@@ -234,5 +316,40 @@ export default defineContentScript({
         next: endText.slice(range.endOffset, range.endOffset + 5),
       };
     };
+
+    const formatReportContext = (text: string, context: SelectionContext) => {
+      return `${context.prev || '∅'}[${text}]${context.next || '∅'}`;
+    };
+
+    const openTranslator = (text: string, engine: TranslatorEngine) => {
+      const builder = TRANSLATOR_URL_BUILDERS[engine] ?? TRANSLATOR_URL_BUILDERS.google;
+      window.open(builder(text), '_blank', 'noopener,noreferrer');
+    };
   },
 });
+
+function isExtensionEnabledOnCurrentPage(settings: ExtensionSettings) {
+  const host = normalizeHost(window.location.hostname);
+  if (!host) return true;
+
+  if (matchesHostList(host, settings.pausedHosts)) {
+    return false;
+  }
+
+  if (settings.siteAccessMode === 'whitelist') {
+    return matchesHostList(host, settings.whitelist);
+  }
+
+  return !matchesHostList(host, settings.blacklist);
+}
+
+function matchesHostList(host: string, list: string[]) {
+  return list.some((item) => {
+    const normalized = normalizeHost(item);
+    return normalized === host || host.endsWith(`.${normalized}`);
+  });
+}
+
+function normalizeHost(host: string) {
+  return host.trim().toLowerCase().replace(/^www\./, '');
+}

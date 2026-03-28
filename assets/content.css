@@ -82,6 +82,7 @@
 #my-floating-popup .tooltip-actions {
   display: flex;
   justify-content: flex-end;
+  gap: 8px;
 }
 
 #my-floating-popup .word-card-btn {
@@ -107,6 +108,10 @@
   background: rgba(59, 130, 246, 0.28);
 }
 
+#my-floating-popup .word-card-btn.translate-btn {
+  background: rgba(14, 165, 233, 0.24);
+}
+
 #my-floating-popup .tooltip-actions .word-card-btn.audio-btn {
   flex: 0 0 auto;
   min-width: 112px;
@@ -118,4 +123,186 @@
 
 #my-floating-popup .word-card-btn.favorite-btn.is-active {
   background: rgba(245, 158, 11, 0.3);
+}
+
+#my-floating-popup .word-card-btn.report-btn {
+  flex: 0 0 auto;
+  min-width: 48px;
+  background: rgba(16, 185, 129, 0.24);
+}
+
+.weicheng-report-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483647;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: rgba(10, 14, 22, 0.55);
+  backdrop-filter: blur(6px);
+}
+
+.weicheng-report-modal {
+  width: min(100%, 520px);
+  max-height: min(90vh, 760px);
+  overflow: auto;
+  border-radius: 20px;
+  padding: 20px;
+  color: #e5eef9;
+  background:
+    linear-gradient(180deg, rgba(27, 36, 54, 0.96), rgba(15, 20, 31, 0.98));
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  box-shadow: 0 28px 80px rgba(0, 0, 0, 0.35);
+}
+
+.weicheng-report-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.weicheng-report-eyebrow {
+  margin: 0 0 6px;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #93c5fd;
+}
+
+.weicheng-report-title {
+  margin: 0;
+  font-size: 24px;
+  line-height: 1.2;
+}
+
+.weicheng-report-close {
+  border: 0;
+  border-radius: 999px;
+  width: 36px;
+  height: 36px;
+  font-size: 24px;
+  line-height: 1;
+  cursor: pointer;
+  color: #e5eef9;
+  background: rgba(148, 163, 184, 0.16);
+}
+
+.weicheng-report-meta {
+  margin-bottom: 18px;
+  padding: 14px;
+  border-radius: 14px;
+  background: rgba(15, 23, 42, 0.42);
+  border: 1px solid rgba(148, 163, 184, 0.14);
+}
+
+.weicheng-report-meta p {
+  margin: 0 0 8px;
+  line-height: 1.5;
+  word-break: break-word;
+}
+
+.weicheng-report-meta p:last-child {
+  margin-bottom: 0;
+}
+
+.weicheng-report-form {
+  display: grid;
+  gap: 16px;
+}
+
+.weicheng-report-options {
+  display: grid;
+  gap: 10px;
+}
+
+.weicheng-report-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(30, 41, 59, 0.58);
+  border: 1px solid rgba(148, 163, 184, 0.12);
+}
+
+.weicheng-report-option input {
+  accent-color: #60a5fa;
+}
+
+.weicheng-report-field {
+  display: grid;
+  gap: 8px;
+}
+
+.weicheng-report-label {
+  font-size: 13px;
+  color: #cbd5e1;
+}
+
+.weicheng-report-input {
+  width: 100%;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-radius: 12px;
+  padding: 10px 12px;
+  font: inherit;
+  color: #f8fafc;
+  background: rgba(15, 23, 42, 0.68);
+}
+
+.weicheng-report-input:focus {
+  outline: 2px solid rgba(96, 165, 250, 0.35);
+  outline-offset: 2px;
+}
+
+.weicheng-report-message,
+.weicheng-report-success {
+  border-radius: 12px;
+  padding: 10px 12px;
+  line-height: 1.5;
+  background: rgba(15, 23, 42, 0.7);
+  border: 1px solid rgba(148, 163, 184, 0.14);
+}
+
+.weicheng-report-success {
+  color: #bbf7d0;
+}
+
+.weicheng-report-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.weicheng-report-secondary,
+.weicheng-report-submit {
+  border: 0;
+  border-radius: 12px;
+  padding: 10px 14px;
+  font: inherit;
+  cursor: pointer;
+  transition: opacity 120ms ease, transform 120ms ease, background-color 120ms ease;
+}
+
+.weicheng-report-secondary {
+  color: #e2e8f0;
+  background: rgba(148, 163, 184, 0.15);
+}
+
+.weicheng-report-submit {
+  color: #eff6ff;
+  background: linear-gradient(135deg, #2563eb, #0f766e);
+}
+
+.weicheng-report-secondary:hover,
+.weicheng-report-submit:hover {
+  transform: translateY(-1px);
+}
+
+.weicheng-report-submit:disabled {
+  cursor: not-allowed;
+  opacity: 0.68;
+  transform: none;
 }
