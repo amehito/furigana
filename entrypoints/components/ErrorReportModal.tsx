@@ -3,14 +3,15 @@ import { useEffect, useMemo, useState } from 'react';
 const REPORT_FORM_ID = '1FAIpQLSdjKa6b2yIqzpRo3ZZzEXA0QL6LAzy-UTE9Z9vtM6KwGPNKVA';
 const REPORT_ENDPOINT = `https://docs.google.com/forms/d/e/${REPORT_FORM_ID}/formResponse`;
 const REPORT_STORAGE_KEY = 'https://word.cloud.microsoft/en-us/';
+const KANJI_PATTERN = /[\u4E00-\u9FFF]/;
 const REPORT_OPTIONS = [
-  'UNCORRECT_FURIGANA',
-  'MISS_FURIGANA',
-  'MULTI_PRONUANCE',
-  'other',
+  { label: '注音错误', value: 'UNCORRECT_FURIGANA' },
+  { label: '缺少注音', value: 'MISS_FURIGANA' },
+  { label: '多音字 / 多读音', value: 'MULTI_PRONUANCE' },
+  { label: '其他', value: 'other' },
 ] as const;
 
-type ReportType = (typeof REPORT_OPTIONS)[number];
+type ReportType = (typeof REPORT_OPTIONS)[number]['value'];
 
 type ErrorReportModalProps = {
   currentFurigana: string;
@@ -27,21 +28,24 @@ export function ErrorReportModal({
   reportContext,
   word,
 }: ErrorReportModalProps) {
-  const [selectedTypes, setSelectedTypes] = useState<ReportType[]>([]);
+  const [selectedType, setSelectedType] = useState<ReportType>('UNCORRECT_FURIGANA');
   const [suggestedReading, setSuggestedReading] = useState('');
+  const [remark, setRemark] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [message, setMessage] = useState('');
   const [hasReported, setHasReported] = useState(false);
 
-  const shouldShowSuggestion = selectedTypes.includes('MULTI_PRONUANCE');
-
+  const shouldShowSuggestion = selectedType === 'MULTI_PRONUANCE';
   const currentUrl = useMemo(() => window.location.href, []);
+  const plainFurigana = useMemo(() => extractReadingText(currentFurigana), [currentFurigana]);
+  const showTitleReading = KANJI_PATTERN.test(word) && plainFurigana;
 
   useEffect(() => {
     if (!isOpen) return;
 
-    setSelectedTypes([]);
+    setSelectedType('UNCORRECT_FURIGANA');
     setSuggestedReading('');
+    setRemark('');
     setIsSubmitting(false);
     setMessage('');
     setHasReported(hasWordBeenReported(word));
@@ -49,24 +53,10 @@ export function ErrorReportModal({
 
   if (!isOpen) return null;
 
-  const handleTypeChange = (type: ReportType) => {
-    setSelectedTypes((current) => {
-      if (current.includes(type)) {
-        return current.filter((item) => item !== type);
-      }
-
-      return [...current, type];
-    });
-  };
-
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
     if (hasReported || isSubmitting) return;
-    if (!selectedTypes.length) {
-      setMessage('请至少选择一个问题类型。');
-      return;
-    }
     if (shouldShowSuggestion && !suggestedReading.trim()) {
       setMessage('请填写建议读音。');
       return;
@@ -79,10 +69,8 @@ export function ErrorReportModal({
     payload.append('entry.1330580616', word);
     payload.append('entry.721528465', buildReportContext(reportContext, suggestedReading));
     payload.append('entry.54097300', currentUrl);
-
-    for (const type of selectedTypes) {
-      payload.append('entry.1774717866', type);
-    }
+    payload.append('entry.1774717866', selectedType);
+    payload.append('entry.1136462363', buildExtraNote(remark, suggestedReading));
 
     try {
       await fetch(REPORT_ENDPOINT, {
@@ -96,7 +84,7 @@ export function ErrorReportModal({
 
       saveReportedWord(word);
       setHasReported(true);
-      setMessage('✅ 您已上报过该词');
+      setMessage('✅ 您已上报成功');
     } catch (error) {
       console.error('上报失败:', error);
       setMessage('提交失败，请稍后再试。');
@@ -116,7 +104,10 @@ export function ErrorReportModal({
         <div className="weicheng-report-header">
           <div>
             <p className="weicheng-report-eyebrow">错误反馈</p>
-            <h3 className="weicheng-report-title">{word}</h3>
+            <h3 className="weicheng-report-title">
+              {word}
+              {showTitleReading ? <span className="weicheng-report-title-reading">（{plainFurigana}）</span> : null}
+            </h3>
           </div>
           <button className="weicheng-report-close" onClick={onClose} type="button">
             ×
@@ -124,26 +115,30 @@ export function ErrorReportModal({
         </div>
 
         <div className="weicheng-report-meta">
-          <p><strong>当前网址：</strong>{currentUrl}</p>
-          <p><strong>当前注音：</strong>{currentFurigana}</p>
+          <p><strong>当前注音：</strong>{plainFurigana || currentFurigana}</p>
           <p><strong>上下文：</strong>{reportContext}</p>
         </div>
 
         {hasReported ? (
-          <div className="weicheng-report-success">✅ 您已上报过该词</div>
+          <div className="weicheng-report-success">✅ 您已上报成功</div>
         ) : (
           <form className="weicheng-report-form" onSubmit={handleSubmit}>
-            <div className="weicheng-report-options">
-              {REPORT_OPTIONS.map((type) => (
-                <label className="weicheng-report-option" key={type}>
-                  <input
-                    checked={selectedTypes.includes(type)}
-                    onChange={() => handleTypeChange(type)}
-                    type="checkbox"
-                  />
-                  <span>{type}</span>
-                </label>
-              ))}
+            <div className="weicheng-report-field">
+              <label className="weicheng-report-label" htmlFor="weicheng-report-type">
+                问题类型
+              </label>
+              <select
+                className="weicheng-report-input"
+                id="weicheng-report-type"
+                onChange={(event) => setSelectedType(event.target.value as ReportType)}
+                value={selectedType}
+              >
+                {REPORT_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
             </div>
 
             {shouldShowSuggestion ? (
@@ -160,6 +155,19 @@ export function ErrorReportModal({
                 />
               </div>
             ) : null}
+
+            <div className="weicheng-report-field">
+              <label className="weicheng-report-label" htmlFor="weicheng-report-remark">
+                备注
+              </label>
+              <input
+                className="weicheng-report-input"
+                id="weicheng-report-remark"
+                onChange={(event) => setRemark(event.target.value)}
+                placeholder="可补充错误原因、建议或特殊上下文"
+                value={remark}
+              />
+            </div>
 
             {message ? <div className="weicheng-report-message">{message}</div> : null}
 
@@ -181,6 +189,27 @@ export function ErrorReportModal({
 function buildReportContext(context: string, suggestedReading: string) {
   if (!suggestedReading.trim()) return context;
   return `${context}\nSuggestedReading: ${suggestedReading.trim()}`;
+}
+
+function buildExtraNote(remark: string, suggestedReading: string) {
+  const parts = [
+    suggestedReading.trim() ? `建议读音: ${suggestedReading.trim()}` : '',
+    remark.trim(),
+  ].filter(Boolean);
+
+  return parts.join('\n');
+}
+
+function extractReadingText(content: string) {
+  const rtMatches = Array.from(content.matchAll(/<rt[^>]*>(.*?)<\/rt>/g))
+    .map((match) => match[1]?.trim() ?? '')
+    .filter(Boolean);
+
+  if (rtMatches.length) {
+    return rtMatches.join('');
+  }
+
+  return content.replace(/<[^>]+>/g, '').replace(/\s+/g, '').trim();
 }
 
 function hasWordBeenReported(word: string) {

@@ -375,9 +375,41 @@ class FuriganaProcessor {
     if (directMatch) return directMatch;
 
     const [, kanjiPart, kanaPart] = okuriganaMatch;
+    const dictionaryMatch = this.resolveOkuriganaFromDictionary(kanjiPart, kanaPart);
+    if (dictionaryMatch) return dictionaryMatch;
+
+    const tablePatternMatch = this.resolveOkuriganaFromCandidates(KUNYOMI_TABLE[kanjiPart], kanaPart);
+    if (tablePatternMatch) return tablePatternMatch;
+
     const baseEntry = KUNYOMI_TABLE[kanjiPart]?.[0];
     if (!baseEntry) return null;
     return `${baseEntry}${kanaPart}`;
+  }
+
+  private resolveOkuriganaFromDictionary(kanjiPart: string, kanaPart: string): string | null {
+    if (kanjiPart.length !== 1) return null;
+
+    const entry = this.dict[kanjiPart];
+    if (!entry) return null;
+
+    return this.resolveOkuriganaFromCandidates(entry.readings_kun, kanaPart);
+  }
+
+  private resolveOkuriganaFromCandidates(candidates: string[] | undefined, kanaPart: string): string | null {
+    if (!Array.isArray(candidates) || !candidates.length) return null;
+
+    for (const rawCandidate of candidates) {
+      const candidate = rawCandidate.replace(/[!\-]/g, '');
+      if (!candidate.includes('.')) continue;
+
+      const [stem, ...suffixParts] = candidate.split('.');
+      const suffix = suffixParts.join('');
+      if (suffix !== kanaPart) continue;
+
+      return `${stem}${suffix}`;
+    }
+
+    return null;
   }
 
   private resolveCompound(text: string): string | null {

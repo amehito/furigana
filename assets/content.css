@@ -1,103 +1,167 @@
 #my-floating-popup {
   position: absolute;
   z-index: 999999;
-  background: #333;
-  color: white;
-  padding: 8px 12px;
-  border-radius: 6px;
+  color: var(--weicheng-tooltip-text, #2c3e50);
+  padding: 0;
   font-size: 14px;
+  font-family: "Inter", "Hiragino Sans", "Yu Gothic", sans-serif;
   pointer-events: auto;
   transform: translateX(-50%);
-  box-shadow: 0 4px 12px rgba(0,0,0,0.2);
   white-space: nowrap;
-  max-width: min(360px, calc(100vw - 24px));
+  max-width: min(372px, calc(100vw - 24px));
+}
+
+#my-floating-popup.is-dragging {
+  user-select: none;
 }
 
 #my-floating-popup .content {
   white-space: normal;
-  line-height: 1.5;
+  line-height: 1.92;
+  font-size: var(--weicheng-tooltip-content-font, 18px);
 }
 
 #my-floating-popup .tooltip-panel {
-  min-width: 220px;
-  max-width: 320px;
+  min-width: 228px;
+  max-width: 336px;
+  position: relative;
   white-space: normal;
+  padding: 18px 18px 14px;
+  border-radius: var(--weicheng-tooltip-radius, 10px);
+  color: var(--weicheng-tooltip-text, #2c3e50);
+  background: var(--weicheng-tooltip-bg, rgba(249, 250, 251, 0.94));
+  border: 0;
+  box-shadow: var(--weicheng-tooltip-shadow, 0 10px 25px -5px rgba(0, 0, 0, 0.1));
+  backdrop-filter: blur(10px);
+  animation: weicheng-tooltip-in 180ms ease-out;
 }
 
 #my-floating-popup .tooltip-body {
-  margin-bottom: 10px;
-  line-height: 1.6;
+  line-height: 1.96;
+  font-size: var(--weicheng-tooltip-content-font, 18px);
+  letter-spacing: 0.01em;
 }
 
 #my-floating-popup .word-card {
-  min-width: 220px;
-  max-width: 320px;
-  padding: 12px;
-  border-radius: 14px;
-  background:
-    linear-gradient(160deg, rgba(255, 248, 225, 0.12), rgba(255, 255, 255, 0.04)),
-    rgba(24, 27, 32, 0.94);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  box-shadow: 0 14px 40px rgba(15, 23, 42, 0.28);
+  min-width: 228px;
+  max-width: 336px;
+  position: relative;
+  padding: 18px 18px 14px;
+  border-radius: var(--weicheng-tooltip-radius, 10px);
+  background: var(--weicheng-tooltip-bg, rgba(249, 250, 251, 0.94));
+  color: var(--weicheng-tooltip-text, #2c3e50);
+  border: 0;
+  box-shadow: var(--weicheng-tooltip-shadow, 0 10px 25px -5px rgba(0, 0, 0, 0.1));
   white-space: normal;
-  backdrop-filter: blur(14px);
+  backdrop-filter: blur(10px);
+  animation: weicheng-tooltip-in 180ms ease-out;
 }
 
-#my-floating-popup .word-card-header {
+#my-floating-popup .weicheng-card-header {
   display: flex;
-  justify-content: space-between;
   align-items: flex-start;
-  gap: 10px;
-  margin-bottom: 8px;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.18);
+  cursor: grab;
 }
 
-#my-floating-popup .word-card-word {
-  font-size: 1.1em;
+#my-floating-popup .weicheng-card-header:active {
+  cursor: grabbing;
+}
+
+#my-floating-popup .weicheng-card-header-main {
+  min-width: 0;
+  display: grid;
+  gap: 8px;
+}
+
+#my-floating-popup .weicheng-card-title {
+  font-size: 15px;
   font-weight: 700;
   line-height: 1.25;
+  letter-spacing: -0.01em;
+  color: rgba(44, 62, 80, 0.96);
+  word-break: break-word;
 }
 
-#my-floating-popup .word-card-tag {
-  flex-shrink: 0;
-  padding: 3px 8px;
+#my-floating-popup .weicheng-card-badge {
+  width: fit-content;
+  padding: 3px 9px;
   border-radius: 999px;
   font-size: 11px;
   line-height: 1.2;
-  background: rgba(255, 213, 79, 0.14);
-  color: #ffe082;
-  border: 1px solid rgba(255, 213, 79, 0.28);
+  background: rgba(148, 163, 184, 0.12);
+  color: rgba(71, 85, 105, 0.78);
 }
 
 #my-floating-popup .card-furigana {
-  margin-bottom: 12px;
-  font-size: 1.05em;
-  line-height: 1.5;
+  font-size: var(--weicheng-tooltip-content-font, 18px);
+  line-height: 1.95;
+  flex: 1;
+  color: rgba(44, 62, 80, 0.9);
 }
 
-#my-floating-popup .word-card-actions {
+#my-floating-popup .card-furigana-row,
+#my-floating-popup .tooltip-footer-actions,
+#my-floating-popup .word-card-bottom-actions {
   display: flex;
+  align-items: center;
   gap: 8px;
 }
 
-#my-floating-popup .tooltip-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
+#my-floating-popup .card-furigana-row {
+  margin-bottom: 14px;
 }
 
 #my-floating-popup .word-card-btn {
-  flex: 1;
   border: 0;
-  border-radius: 10px;
-  padding: 8px 10px;
-  font: inherit;
-  color: #fff;
+  border-radius: 999px;
+  padding: 0;
+  font: inherit;  
+  font-size: var(--weicheng-tooltip-font, 14px);
+  color: #64748b;
   cursor: pointer;
-  transition: transform 120ms ease, opacity 120ms ease, background-color 120ms ease;
+  transition: transform 140ms ease, opacity 140ms ease, background-color 140ms ease, color 140ms ease, box-shadow 140ms ease;
+}
+
+#my-floating-popup .word-card-btn:disabled {
+  cursor: wait;
+  opacity: 0.72;
+}
+
+#my-floating-popup .weicheng-btn-inner {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+#my-floating-popup .weicheng-btn-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.weicheng-icon-spin {
+  animation: weicheng-icon-spin 900ms linear infinite;
+}
+
+#my-floating-popup .icon-btn {
+  flex: 0 0 auto;
+  min-width: 32px;
+  width: 32px;
+  height: 32px;
+  background: rgba(255, 255, 255, 0.72);
+  box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.18);
 }
 
 #my-floating-popup .word-card-btn:hover {
   transform: translateY(-1px);
+  color: #334155;
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: inset 0 0 0 1px rgba(100, 116, 139, 0.16), 0 6px 12px rgba(15, 23, 42, 0.08);
 }
 
 #my-floating-popup .word-card-btn:active {
@@ -105,30 +169,63 @@
 }
 
 #my-floating-popup .word-card-btn.audio-btn {
-  background: rgba(59, 130, 246, 0.28);
+  color: #5b6b7d;
 }
 
 #my-floating-popup .word-card-btn.translate-btn {
-  background: rgba(14, 165, 233, 0.24);
-}
-
-#my-floating-popup .tooltip-actions .word-card-btn.audio-btn {
-  flex: 0 0 auto;
-  min-width: 112px;
+  color: #607184;
 }
 
 #my-floating-popup .word-card-btn.favorite-btn {
-  background: rgba(244, 114, 182, 0.24);
+  color: #c86d8e;
 }
 
 #my-floating-popup .word-card-btn.favorite-btn.is-active {
-  background: rgba(245, 158, 11, 0.3);
+  color: #f59e0b;
+  background: rgba(255, 244, 214, 0.88);
+  box-shadow: inset 0 0 0 1px rgba(245, 158, 11, 0.22);
+}
+
+#my-floating-popup .word-card-btn.favorite-btn.is-active svg {
+  fill: currentColor;
 }
 
 #my-floating-popup .word-card-btn.report-btn {
-  flex: 0 0 auto;
-  min-width: 48px;
-  background: rgba(16, 185, 129, 0.24);
+  color: #6b8f7d;
+}
+
+#my-floating-popup .weicheng-pin-btn {
+  flex-shrink: 0;
+}
+
+#my-floating-popup .weicheng-pin-btn.is-pinned {
+  color: #2563eb;
+  background: rgba(219, 234, 254, 0.92);
+  box-shadow: inset 0 0 0 1px rgba(37, 99, 235, 0.18);
+}
+
+#my-floating-popup .tooltip-footer-actions {
+  justify-content: flex-end;
+  margin-top: 14px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(148, 163, 184, 0.14);
+}
+
+#my-floating-popup .word-card-bottom-actions {
+  justify-content: flex-end;
+  padding-top: 10px;
+  border-top: 1px solid rgba(148, 163, 184, 0.14);
+}
+
+#my-floating-popup rt {
+  color: #7c8796;
+  margin-bottom: 0;
+  text-align: center;
+}
+
+#my-floating-popup .tooltip-body ruby + ruby,
+#my-floating-popup .card-furigana ruby + ruby {
+  margin-left: 0.04em;
 }
 
 .weicheng-report-backdrop {
@@ -176,6 +273,13 @@
   margin: 0;
   font-size: 24px;
   line-height: 1.2;
+}
+
+.weicheng-report-title-reading {
+  margin-left: 6px;
+  font-size: 16px;
+  font-weight: 500;
+  color: #94a3b8;
 }
 
 .weicheng-report-close {
@@ -305,4 +409,24 @@
   cursor: not-allowed;
   opacity: 0.68;
   transform: none;
+}
+
+@keyframes weicheng-tooltip-in {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes weicheng-icon-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
 }

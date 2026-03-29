@@ -1,6 +1,8 @@
 import '../assets/content.css';
 import React from 'react';
 import { createRoot } from 'react-dom/client';
+import { renderToStaticMarkup } from 'react-dom/server';
+import { Flag, Languages, LoaderCircle, Pin, PinOff, Star, Volume2 } from 'lucide-react';
 import { furiganaService } from '../util/common';
 import { browser } from 'wxt/browser';
 import {
@@ -18,6 +20,8 @@ const reportModalId = 'weicheng-report-root';
 const MAX_TOOLTIP_CHARS = 100;
 const WORD_CARD_CHARS = 7;
 const KANJI_PATTERN = /[\u4E00-\u9FFF]/;
+const LUCIDE_ICON_SIZE = 16;
+const LUCIDE_ICON_STROKE = 1.5;
 type SelectionContext = { prev: string; next: string };
 type ReportPayload = { word: string; reportContext: string; currentFurigana: string };
 
@@ -52,6 +56,15 @@ export default defineContentScript({
         };
       };
     };
+    const audioIcons = {
+      play: createIconMarkup(Volume2),
+      loading: createIconMarkup(LoaderCircle, 'weicheng-icon-spin'),
+      translate: createIconMarkup(Languages),
+      report: createIconMarkup(Flag),
+      favorite: createIconMarkup(Star),
+      pin: createIconMarkup(Pin),
+      pinOff: createIconMarkup(PinOff),
+    };
 
     const loadTooltipSettings = async (): Promise<TooltipSettings> => {
       const data = await browser.storage.local.get('tooltipSettings');
@@ -78,11 +91,17 @@ export default defineContentScript({
     };
 
     const applyStyles = (settings: TooltipSettings) => {
-      overlay.style.backgroundColor = settings.backgroundColor;
       overlay.style.fontSize = `${settings.fontSize}px`;
       overlay.style.color = settings.textColor;
-      overlay.style.padding = `${settings.padding}px ${Math.max(settings.padding + 4, 12)}px`;
+      overlay.style.padding = '0';
       overlay.style.opacity = '1';
+      overlay.style.setProperty('--weicheng-tooltip-font', `${settings.fontSize}px`);
+      overlay.style.setProperty('--weicheng-tooltip-content-font', `${settings.fontSize + 4}px`);
+      overlay.style.setProperty('--weicheng-tooltip-bg', hexToRgba(settings.backgroundColor, settings.bgOpacity / 100));
+      overlay.style.setProperty('--weicheng-tooltip-text', settings.textColor);
+      overlay.style.setProperty('--weicheng-tooltip-radius', `${settings.borderRadius}px`);
+      overlay.style.setProperty('--weicheng-tooltip-padding', `${settings.padding}px`);
+      overlay.style.setProperty('--weicheng-tooltip-shadow', '0 10px 25px -5px rgba(0,0,0,0.1)');
 
       let styleTag = document.getElementById(styleId) as HTMLStyleElement;
       if (!styleTag) {
@@ -94,18 +113,30 @@ export default defineContentScript({
       // 通过 CSS 变量或直接写选择器来控制注音样式
       styleTag.innerHTML = `
         #${divName} rt {
-          font-size: ${settings.rubySize || 0.6}em !important;
-          color: ${settings.rubyColor || settings.textColor} !important;
-          line-height: 1.1 !important;
+          font-size: ${settings.rubySize || 0.58}em !important;
+          color: ${settings.rubyColor || '#7c8796'} !important;
+          font-weight: ${settings.rubyWeight || 400} !important;
+          line-height: 1.08 !important;
+          opacity: 0.9;
+          letter-spacing: 0.01em;
         }
         #${divName} ruby {
           ruby-align: center;
+          ruby-position: over;
+          line-height: 1.95;
         }
       `;
     };
 
     applyStyles(await loadTooltipSettings());
     await loadExtensionSettings();
+    primeSpeechSynthesis();
+
+    let suppressNextSelectionRender = false;
+    let isPinned = false;
+    let isDragging = false;
+    let dragOffsetX = 0;
+    let dragOffsetY = 0;
 
     browser.storage.onChanged.addListener((changes, areaName) => {
       if (areaName !== 'local') return;
@@ -120,10 +151,24 @@ export default defineContentScript({
     });
 
     document.addEventListener('mouseup', async (e) => {
+      if ((e.target as HTMLElement | null)?.closest(`#${divName}`)) {
+        return;
+      }
+
+      if (suppressNextSelectionRender) {
+        suppressNextSelectionRender = false;
+        return;
+      }
+
       const selection = window.getSelection();
       const selectedText = selection?.toString().trim() || '';
 
       if (!selectedText || !selection || selection.rangeCount === 0) {
+        overlay.style.display = 'none';
+        return;
+      }
+
+      if (!extensionSettings.globalEnabled || extensionSettings.furiganaMode === 'disable') {
         overlay.style.display = 'none';
         return;
       }
@@ -154,10 +199,15 @@ export default defineContentScript({
       if (settings?.position === 'left') left = rect.left + window.scrollX - 10;
       if (settings?.position === 'right') left = rect.right + window.scrollX + 10;
 
-      overlay.style.left = `${left}px`;
-      overlay.style.top = `${top}px`;
-      overlay.style.transform = 'translateX(-50%)';
-      overlay.style.display = 'block';
+      if (!isPinned) {
+        overlay.style.left = `${left}px`;
+        overlay.style.top = `${top}px`;
+        overlay.style.transform = 'translateX(-50%)';
+        overlay.style.position = 'absolute';
+        overlay.style.display = 'block';
+      } else {
+        overlay.style.display = 'block';
+      }
 
       const selectionContext = getSelectionContext(range);
 
@@ -174,9 +224,15 @@ export default defineContentScript({
 
     // 点击其他地方隐藏
     document.addEventListener('mousedown', (e) => {
+      if (isPinned) {
+        return;
+      }
+
       // 避免点击浮层内部时消失
       if (!(e.target as HTMLElement).closest(`#${divName}`)) {
+        suppressNextSelectionRender = overlay.style.display !== 'none';
         overlay.style.display = 'none';
+        window.getSelection()?.removeAllRanges();
       }
     });
 
@@ -202,21 +258,130 @@ export default defineContentScript({
       return !exists;
     };
 
-    const playAudio = (text: string) => {
+    const playAudio = (text: string, triggerButton?: HTMLButtonElement | null) => {
       const tts = chromeLike.chrome?.tts;
+      const volume = Math.max(0, Math.min(extensionSettings.ttsVolume, 1));
+      const rate = Math.max(0.5, Math.min(extensionSettings.ttsRate, 2));
+      const clearButtonState = () => {
+        if (!triggerButton) return;
+        setAudioButtonState(triggerButton, false);
+      };
 
       if (tts?.speak) {
+        setAudioButtonState(triggerButton, true);
         tts.stop?.();
-        tts.speak(text, { lang: 'ja-JP', rate: 0.9 });
+        tts.speak(text, { lang: 'ja-JP', rate, volume });
+        window.setTimeout(clearButtonState, 1200);
       } else if (window.speechSynthesis) {
+        setAudioButtonState(triggerButton, true);
         window.speechSynthesis.cancel();
         const utterance = new SpeechSynthesisUtterance(text);
         utterance.lang = 'ja-JP';
-        utterance.rate = 0.9;
+        utterance.rate = rate;
+        utterance.volume = volume;
+        utterance.onstart = clearButtonState;
+        utterance.onerror = clearButtonState;
+        utterance.onend = clearButtonState;
         window.speechSynthesis.speak(utterance);
       } else {
         console.warn('无可用 TTS');
+        clearButtonState();
       }
+    };
+
+    const setOverlayScreenPosition = (left: number, top: number) => {
+      const safeLeft = Math.max(12, Math.min(left, window.innerWidth - 24));
+      const safeTop = Math.max(12, Math.min(top, window.innerHeight - 24));
+      overlay.style.left = `${safeLeft}px`;
+      overlay.style.top = `${safeTop}px`;
+    };
+
+    const buildCardHeader = (badge: string) => {
+      const pinIcon = isPinned ? audioIcons.pinOff : audioIcons.pin;
+      const pinLabel = isPinned ? '解除固定' : '固定卡片';
+
+      return `
+        <div class="weicheng-card-header">
+          <div class="weicheng-card-header-main">
+            <strong class="weicheng-card-title">划词日语</strong>
+            <span class="weicheng-card-badge">${badge}</span>
+          </div>
+          <button aria-label="${pinLabel}" class="word-card-btn icon-btn weicheng-pin-btn ${isPinned ? 'is-pinned' : ''}" title="${pinLabel}" type="button">
+            ${buildButtonContent(pinIcon, '')}
+          </button>
+        </div>
+      `;
+    };
+
+    const updatePinButtonState = () => {
+      const button = overlay.querySelector<HTMLButtonElement>('.weicheng-pin-btn');
+      if (!button) return;
+
+      const label = isPinned ? '解除固定' : '固定卡片';
+      button.classList.toggle('is-pinned', isPinned);
+      button.setAttribute('aria-label', label);
+      button.setAttribute('title', label);
+      button.innerHTML = buildButtonContent(isPinned ? audioIcons.pinOff : audioIcons.pin, '');
+    };
+
+    const togglePinnedState = () => {
+      const rect = overlay.getBoundingClientRect();
+      isPinned = !isPinned;
+
+      if (isPinned) {
+        overlay.style.position = 'fixed';
+        overlay.style.transform = 'none';
+        setOverlayScreenPosition(rect.left, rect.top);
+      } else {
+        overlay.style.position = 'fixed';
+        overlay.style.transform = 'none';
+        setOverlayScreenPosition(rect.left, rect.top);
+      }
+
+      updatePinButtonState();
+    };
+
+    const attachOverlayChrome = () => {
+      overlay.querySelector<HTMLButtonElement>('.weicheng-pin-btn')?.addEventListener('click', (event) => {
+        event.preventDefault();
+        togglePinnedState();
+      });
+
+      const header = overlay.querySelector<HTMLElement>('.weicheng-card-header');
+      header?.addEventListener('pointerdown', (event) => {
+        const target = event.target as HTMLElement | null;
+        if (!target || target.closest('button')) return;
+
+        if (isPinned) {
+          return;
+        }
+
+        const rect = overlay.getBoundingClientRect();
+        isDragging = true;
+        dragOffsetX = event.clientX - rect.left;
+        dragOffsetY = event.clientY - rect.top;
+
+        overlay.style.position = 'fixed';
+        overlay.style.transform = 'none';
+        setOverlayScreenPosition(rect.left, rect.top);
+        overlay.classList.add('is-dragging');
+        header.setPointerCapture(event.pointerId);
+        event.preventDefault();
+      });
+
+      header?.addEventListener('pointermove', (event) => {
+        if (!isDragging || isPinned) return;
+        setOverlayScreenPosition(event.clientX - dragOffsetX, event.clientY - dragOffsetY);
+      });
+
+      const endDragging = () => {
+        if (!isDragging) return;
+        isDragging = false;
+        overlay.classList.remove('is-dragging');
+      };
+
+      header?.addEventListener('pointerup', endDragging);
+      header?.addEventListener('pointercancel', endDragging);
     };
 
     const renderTooltipWithAudio = async (text: string, context: SelectionContext) => {
@@ -224,17 +389,20 @@ export default defineContentScript({
 
       overlay.innerHTML = `
         <div class="tooltip-panel">
+          ${buildCardHeader('句子')}
           <div class="tooltip-body content">${html}</div>
-          <div class="tooltip-actions">
-            <button class="word-card-btn audio-btn" type="button">播放音频</button>
-            <button class="word-card-btn translate-btn" type="button">翻译</button>
-            <button class="word-card-btn report-btn" type="button">🚩</button>
+          <div class="tooltip-footer-actions">
+            <button aria-label="翻译" class="word-card-btn icon-btn translate-btn" title="翻译" type="button">${buildButtonContent(audioIcons.translate, '')}</button>
+            <button aria-label="播放音频" class="word-card-btn icon-btn audio-btn" title="播放音频" type="button">${buildButtonContent(audioIcons.play, '')}</button>
+            <button aria-label="错误反馈" class="word-card-btn icon-btn report-btn" title="错误反馈" type="button">${buildButtonContent(audioIcons.report, '')}</button>
           </div>
         </div>
       `;
 
-      overlay.querySelector<HTMLButtonElement>('.audio-btn')?.addEventListener('click', () => {
-        playAudio(text);
+      attachOverlayChrome();
+
+      overlay.querySelector<HTMLButtonElement>('.audio-btn')?.addEventListener('click', (event) => {
+        playAudio(text, event.currentTarget as HTMLButtonElement);
       });
 
       overlay.querySelector<HTMLButtonElement>('.translate-btn')?.addEventListener('click', () => {
@@ -248,6 +416,10 @@ export default defineContentScript({
           currentFurigana: html,
         });
       });
+
+      if (extensionSettings.autoPlayAudio) {
+        playAudio(text);
+      }
     };
 
     const renderWordCard = async (text: string, context: SelectionContext) => {
@@ -264,24 +436,25 @@ export default defineContentScript({
 
       overlay.innerHTML = `
         <div class="word-card">
-          <div class="word-card-header">
-            <strong class="word-card-word">${text}</strong>
-            <span class="word-card-tag">${tagLabel}</span>
-          </div>
-          <div class="card-furigana">
+          ${buildCardHeader(tagLabel)}
+          <div class="card-furigana-row">
+            <div class="card-furigana">
             ${rubyHtml}
+            </div>
           </div>
-          <div class="word-card-actions">
-            <button class="word-card-btn audio-btn" type="button">播放音频</button>
-            <button class="word-card-btn translate-btn" type="button">翻译</button>
-            <button class="word-card-btn favorite-btn ${fav ? 'is-active' : ''}" type="button">${fav ? '已收藏' : '添加收藏'}</button>
-            <button class="word-card-btn report-btn" type="button">🚩</button>
+          <div class="word-card-bottom-actions">
+            <button aria-label="翻译" class="word-card-btn icon-btn translate-btn" title="翻译" type="button">${buildButtonContent(audioIcons.translate, '')}</button>
+            <button aria-label="${fav ? '取消收藏' : '添加收藏'}" class="word-card-btn icon-btn favorite-btn ${fav ? 'is-active' : ''}" title="${fav ? '取消收藏' : '添加收藏'}" type="button">${buildButtonContent(audioIcons.favorite, '')}</button>
+            <button aria-label="播放音频" class="word-card-btn icon-btn audio-btn" title="播放音频" type="button">${buildButtonContent(audioIcons.play, '')}</button>
+            <button aria-label="错误反馈" class="word-card-btn icon-btn report-btn" title="错误反馈" type="button">${buildButtonContent(audioIcons.report, '')}</button>
           </div>
         </div>
       `;
 
-      overlay.querySelector<HTMLButtonElement>('.audio-btn')?.addEventListener('click', () => {
-        playAudio(text);
+      attachOverlayChrome();
+
+      overlay.querySelector<HTMLButtonElement>('.audio-btn')?.addEventListener('click', (event) => {
+        playAudio(text, event.currentTarget as HTMLButtonElement);
       });
 
       overlay.querySelector<HTMLButtonElement>('.translate-btn')?.addEventListener('click', () => {
@@ -293,8 +466,9 @@ export default defineContentScript({
         const nowFav = await toggleFavorite(text);
         const btn = overlay.querySelector<HTMLButtonElement>('.favorite-btn');
         if (btn) {
-          btn.textContent = nowFav ? '已收藏' : '添加收藏';
           btn.classList.toggle('is-active', nowFav);
+          btn.setAttribute('aria-label', nowFav ? '取消收藏' : '添加收藏');
+          btn.setAttribute('title', nowFav ? '取消收藏' : '添加收藏');
         }
       });
 
@@ -305,6 +479,10 @@ export default defineContentScript({
           currentFurigana: rubyHtml,
         });
       });
+
+      if (extensionSettings.autoPlayAudio) {
+        playAudio(text);
+      }
     };
 
     const getSelectionContext = (range: Range): SelectionContext => {
@@ -352,4 +530,61 @@ function matchesHostList(host: string, list: string[]) {
 
 function normalizeHost(host: string) {
   return host.trim().toLowerCase().replace(/^www\./, '');
+}
+
+function hexToRgba(hex: string, alpha: number) {
+  const normalized = hex.replace('#', '');
+  const safeHex = normalized.length === 3
+    ? normalized.split('').map((char) => `${char}${char}`).join('')
+    : normalized;
+
+  const red = Number.parseInt(safeHex.slice(0, 2), 16);
+  const green = Number.parseInt(safeHex.slice(2, 4), 16);
+  const blue = Number.parseInt(safeHex.slice(4, 6), 16);
+
+  if ([red, green, blue].some((value) => Number.isNaN(value))) {
+    return `rgba(255, 255, 255, ${alpha})`;
+  }
+
+  return `rgba(${red}, ${green}, ${blue}, ${alpha})`;
+}
+
+function createIconMarkup(Icon: typeof Volume2, className = '') {
+  return renderToStaticMarkup(
+    React.createElement(Icon, {
+      className,
+      size: LUCIDE_ICON_SIZE,
+      strokeWidth: LUCIDE_ICON_STROKE,
+    }),
+  );
+}
+
+function buildButtonContent(iconMarkup: string, label: string) {
+  return `
+    <span class="weicheng-btn-inner">
+      <span class="weicheng-btn-icon">${iconMarkup}</span>
+      ${label ? `<span class="weicheng-btn-label">${label}</span>` : ''}
+    </span>
+  `;
+}
+
+function setAudioButtonState(button: HTMLButtonElement | null | undefined, loading: boolean) {
+  if (!button) return;
+
+  button.disabled = loading;
+  button.innerHTML = loading
+    ? buildButtonContent(createIconMarkup(LoaderCircle, 'weicheng-icon-spin'), '')
+    : buildButtonContent(createIconMarkup(Volume2), '');
+}
+
+function primeSpeechSynthesis() {
+  if (!window.speechSynthesis) return;
+
+  window.speechSynthesis.getVoices();
+  const handleVoicesChanged = () => {
+    window.speechSynthesis.getVoices();
+    window.speechSynthesis.removeEventListener('voiceschanged', handleVoicesChanged);
+  };
+
+  window.speechSynthesis.addEventListener('voiceschanged', handleVoicesChanged);
 }
