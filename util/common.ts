@@ -6,11 +6,8 @@ import {
   COUNTER_SOKUON_DIGITS,
   DEFAULT_CONTEXT,
   DIGIT_READINGS,
-  FAMILY_NAMES,
   JAPAN_CITY_MAP,
-  KANJI_FIXED_READING_MAP,
   KANJI_PATTERN,
-  KUNYOMI_TABLE,
   LARGE_NUMBER_UNITS,
   NUMERIC_COUNTER_PATTERN,
   NUMERIC_COUNTER_READING_MAP,
@@ -36,27 +33,48 @@ type RemoteOverride = {
   prefix?: string;
 };
 type NumericCounterConfig = typeof NUMERIC_COUNTER_READING_MAP;
+type FixedReadingMap = Record<string, string>;
+type SpecialCasesPayload = {
+  version?: string;
+  compounds?: Record<string, string[] | string>;
+  patch_chars?: Record<string, KanjiEntry>;
+};
+type PatchVersionPayload = {
+  version?: string;
+  min_app_version?: string;
+  last_updated?: string;
+  message?: string;
+};
+
+const SPECIAL_CASES_URL = 'https://cdn.jsdelivr.net/gh/amehito/japanese-dict-patch@main/special_cases.json';
+const PATCH_VERSION_URL = 'https://cdn.jsdelivr.net/gh/amehito/japanese-dict-patch@main/version.json';
+const PATCH_STORAGE_KEY = 'furigana_patch_payload';
+const PATCH_VERSION_STORAGE_KEY = 'furigana_patch_version';
+const PATCH_CHECKED_AT_STORAGE_KEY = 'furigana_patch_checked_at';
+const PATCH_NOTICE_STORAGE_KEY = 'furigana_patch_notice';
+const PATCH_REFRESH_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000;
 
 class FuriganaProcessor {
   private readonly segmenter = new Intl.Segmenter('ja-JP', { granularity: 'word' });
   private readonly entityMap: Map<string, string>;
-  private readonly fixedReadingMap: Map<string, string>;
-  private readonly fixedReadingKeys: string[];
   private readonly numericCounterConfig: NumericCounterConfig;
+  private dict: KanjiDict;
+  private fixedReadingMap = new Map<string, string>();
+  private fixedReadingKeys: string[] = [];
   private overridesCache: RemoteOverride[] = [];
   private sortedOverridesCache: RemoteOverride[] = [];
   private overridesPromise: Promise<RemoteOverride[]> | null = null;
   private overridesLoaded = false;
 
   constructor(
-    private readonly dict: KanjiDict,
+    dict: KanjiDict,
     cityDict: Record<string, string>,
     fixedReadings: Record<string, string>,
     numericCounterConfig: NumericCounterConfig,
     private readonly fallbackConvert: (text: string) => string,
   ) {
-    this.fixedReadingMap = new Map(Object.entries(fixedReadings));
-    this.fixedReadingKeys = Object.keys(fixedReadings).sort((a, b) => b.length - a.length);
+    this.dict = dict;
+    this.setFixedReadings(fixedReadings);
     this.numericCounterConfig = numericCounterConfig;
     this.entityMap = new Map(Object.entries(cityDict));
 
@@ -67,6 +85,14 @@ class FuriganaProcessor {
         this.overridesPromise = Promise.resolve(this.overridesCache);
       }
     });
+  }
+
+  updateDict(dict: KanjiDict) {
+    this.dict = dict;
+  }
+
+  updateFixedReadings(fixedReadings: FixedReadingMap) {
+    this.setFixedReadings(fixedReadings);
   }
 
   async process(text: string, context: ConvertContext = DEFAULT_CONTEXT): Promise<string> {
@@ -371,19 +397,10 @@ class FuriganaProcessor {
     const okuriganaMatch = text.match(OKURIGANA_PATTERN);
     if (!okuriganaMatch) return null;
 
-    const directMatch = KUNYOMI_TABLE[text]?.[0];
-    if (directMatch) return directMatch;
-
     const [, kanjiPart, kanaPart] = okuriganaMatch;
     const dictionaryMatch = this.resolveOkuriganaFromDictionary(kanjiPart, kanaPart);
     if (dictionaryMatch) return dictionaryMatch;
-
-    const tablePatternMatch = this.resolveOkuriganaFromCandidates(KUNYOMI_TABLE[kanjiPart], kanaPart);
-    if (tablePatternMatch) return tablePatternMatch;
-
-    const baseEntry = KUNYOMI_TABLE[kanjiPart]?.[0];
-    if (!baseEntry) return null;
-    return `${baseEntry}${kanaPart}`;
+    return null;
   }
 
   private resolveOkuriganaFromDictionary(kanjiPart: string, kanaPart: string): string | null {
@@ -429,8 +446,7 @@ class FuriganaProcessor {
   }
 
   private resolvePolyphonicKanji(text: string): string | null {
-    if (text.length !== 1) return null;
-    return KUNYOMI_TABLE[text]?.[0] || null;
+    return null;
   }
 
   private async getRemoteOverrides(): Promise<RemoteOverride[]> {
@@ -466,6 +482,11 @@ class FuriganaProcessor {
     });
   }
 
+  private setFixedReadings(fixedReadings: FixedReadingMap) {
+    this.fixedReadingMap = new Map(Object.entries(fixedReadings));
+    this.fixedReadingKeys = Object.keys(fixedReadings).sort((a, b) => b.length - a.length);
+  }
+
   private setOverridesCache(value: unknown) {
     this.overridesCache = this.normalizeOverrides(value);
     this.sortedOverridesCache = [...this.overridesCache].sort((a, b) => b.text.length - a.text.length);
@@ -495,12 +516,18 @@ class FuriganaProcessor {
 }
 
 class FuriganaService {
+  private baseDict: KanjiDict = {};
   private dict: KanjiDict = {};
   private cityDict: Record<string, string> = JAPAN_CITY_MAP;
-  private familyNames = new Set(FAMILY_NAMES);
+  private familyNameReadings: FixedReadingMap = {};
+  private familyNames = new Set<string>();
+  private localFixedReadings: FixedReadingMap = {};
+  private remotePatchCompounds: FixedReadingMap = {};
+  private remotePatchChars: KanjiDict = {};
   private isLoaded = false;
   private initPromise: Promise<void> | null = null;
   private processor: FuriganaProcessor | null = null;
+  private patchRefreshPromise: Promise<void> | null = null;
 
   async init() {
     if (this.isLoaded) return;
@@ -508,8 +535,20 @@ class FuriganaService {
 
     this.initPromise = (async () => {
       try {
-        const response = await fetch(browser.runtime.getURL('/json/kanji-jouyou.json'));
-        this.dict = await response.json();
+        const [dictResponse, localFixedResponse, familyNamesResponse] = await Promise.all([
+          fetch(browser.runtime.getURL('/json/kanji-jouyou.json')),
+          fetch(browser.runtime.getURL('/json/fixed-readings.json')),
+          fetch(browser.runtime.getURL('/json/family-names.json')),
+        ]);
+
+        this.baseDict = await dictResponse.json();
+        this.localFixedReadings = await localFixedResponse.json();
+        this.familyNameReadings = await familyNamesResponse.json();
+        this.familyNames = new Set(Object.keys(this.familyNameReadings));
+        this.dict = { ...this.baseDict };
+        await this.loadCachedRemotePatch();
+        this.ensureProcessor();
+        void this.refreshRemotePatchIfNeeded();
         this.isLoaded = true;
       } catch (err) {
         console.error('加载字典失败:', err);
@@ -521,13 +560,7 @@ class FuriganaService {
 
   async convert(text: string, context: ConvertContext = DEFAULT_CONTEXT): Promise<string> {
     await this.init();
-    this.processor ??= new FuriganaProcessor(
-      this.dict,
-      this.cityDict,
-      KANJI_FIXED_READING_MAP,
-      NUMERIC_COUNTER_READING_MAP,
-      (segment) => this.baseConvert(segment),
-    );
+    this.ensureProcessor();
     return this.processor.process(text, context);
   }
 
@@ -577,6 +610,155 @@ class FuriganaService {
 
     return resultHtml + kanaPart;
   }
+
+  private ensureProcessor() {
+    if (!this.processor) {
+      this.processor = new FuriganaProcessor(
+        this.dict,
+        this.cityDict,
+        this.getMergedFixedReadings(),
+        NUMERIC_COUNTER_READING_MAP,
+        (segment) => this.baseConvert(segment),
+      );
+      return;
+    }
+
+    this.processor.updateDict(this.dict);
+    this.processor.updateFixedReadings(this.getMergedFixedReadings());
+  }
+
+  private getMergedFixedReadings(): FixedReadingMap {
+    return {
+      ...this.localFixedReadings,
+      ...this.familyNameReadings,
+      ...this.remotePatchCompounds,
+    };
+  }
+
+  private async loadCachedRemotePatch() {
+    const data = await browser.storage.local.get([PATCH_STORAGE_KEY, PATCH_NOTICE_STORAGE_KEY]);
+    this.applyRemotePatchPayload(data[PATCH_STORAGE_KEY]);
+    if (typeof data[PATCH_NOTICE_STORAGE_KEY] === 'string' && data[PATCH_NOTICE_STORAGE_KEY]) {
+      console.warn(data[PATCH_NOTICE_STORAGE_KEY]);
+    }
+  }
+
+  private applyRemotePatchPayload(payload: unknown) {
+    const parsed = this.normalizeSpecialCasesPayload(payload);
+    this.remotePatchCompounds = parsed.compounds;
+    this.remotePatchChars = parsed.patchChars;
+    this.dict = {
+      ...this.baseDict,
+      ...this.remotePatchChars,
+    };
+    this.ensureProcessor();
+  }
+
+  private normalizeSpecialCasesPayload(payload: unknown): { compounds: FixedReadingMap; patchChars: KanjiDict } {
+    if (!payload || typeof payload !== 'object') {
+      return { compounds: {}, patchChars: {} };
+    }
+
+    const raw = payload as SpecialCasesPayload;
+    const compounds = Object.fromEntries(
+      Object.entries(raw.compounds ?? {}).map(([key, value]) => [
+        key,
+        Array.isArray(value) ? (value[0] ?? '') : value,
+      ]).filter(([, value]) => typeof value === 'string' && value.trim()),
+    ) as FixedReadingMap;
+
+    const patchChars = Object.fromEntries(
+      Object.entries(raw.patch_chars ?? {}).filter(([, value]) => value && typeof value === 'object'),
+    ) as KanjiDict;
+
+    return { compounds, patchChars };
+  }
+
+  private async refreshRemotePatchIfNeeded() {
+    if (this.patchRefreshPromise) return this.patchRefreshPromise;
+
+    this.patchRefreshPromise = (async () => {
+      try {
+        const storage = await browser.storage.local.get([
+          PATCH_VERSION_STORAGE_KEY,
+          PATCH_CHECKED_AT_STORAGE_KEY,
+        ]);
+        const lastCheckedAt = Number(storage[PATCH_CHECKED_AT_STORAGE_KEY] ?? 0);
+        const now = Date.now();
+        const shouldForceRefresh = !lastCheckedAt || now - lastCheckedAt >= PATCH_REFRESH_INTERVAL_MS;
+
+        const versionResponse = await fetch(PATCH_VERSION_URL, { cache: 'no-store' });
+        
+        if (!versionResponse.ok) return;
+
+        const versionPayload = await versionResponse.json() as PatchVersionPayload;
+        const currentAppVersion = browser.runtime.getManifest().version || '1.0.0';
+        if (versionPayload.min_app_version && compareVersions(currentAppVersion, versionPayload.min_app_version) < 0) {
+          const notice = versionPayload.message
+            ? `词典补丁需要更新插件版本后才能继续拉取：${versionPayload.message}`
+            : `词典补丁需要插件版本 >= ${versionPayload.min_app_version}`;
+          await browser.storage.local.set({
+            [PATCH_NOTICE_STORAGE_KEY]: notice,
+            [PATCH_CHECKED_AT_STORAGE_KEY]: now,
+          });
+          console.warn(notice);
+          return;
+        }
+
+        const remoteVersion = versionPayload.version ?? '';
+        const localVersion = typeof storage[PATCH_VERSION_STORAGE_KEY] === 'string' ? storage[PATCH_VERSION_STORAGE_KEY] : '';
+        if (!shouldForceRefresh && remoteVersion && remoteVersion === localVersion) {
+          await browser.storage.local.set({ [PATCH_CHECKED_AT_STORAGE_KEY]: now, [PATCH_NOTICE_STORAGE_KEY]: '' });
+          return;
+        }
+
+        const specialCasesResponse = await fetch(SPECIAL_CASES_URL, { cache: 'no-store' });
+        
+        if (!specialCasesResponse.ok) return;
+
+        const specialCasesPayload = await specialCasesResponse.json() as SpecialCasesPayload;
+        const specialCasesVersion = specialCasesPayload.version ?? '';
+
+        if (!remoteVersion || !specialCasesVersion || remoteVersion !== specialCasesVersion) {
+          console.warn(`远端注音补丁版本不一致，已跳过更新: version.json=${remoteVersion || '∅'}, special_cases.json=${specialCasesVersion || '∅'}`);
+          await browser.storage.local.set({
+            [PATCH_CHECKED_AT_STORAGE_KEY]: now,
+          });
+          return;
+        }
+
+        this.applyRemotePatchPayload(specialCasesPayload);
+
+        await browser.storage.local.set({
+          [PATCH_STORAGE_KEY]: specialCasesPayload,
+          [PATCH_VERSION_STORAGE_KEY]: remoteVersion,
+          [PATCH_CHECKED_AT_STORAGE_KEY]: now,
+          [PATCH_NOTICE_STORAGE_KEY]: '',
+        });
+      } catch (error) {
+        console.error('刷新远端注音补丁失败:', error);
+      } finally {
+        this.patchRefreshPromise = null;
+      }
+    })();
+
+    return this.patchRefreshPromise;
+  }
+}
+
+function compareVersions(left: string, right: string) {
+  const leftParts = left.split('.').map((part) => Number.parseInt(part, 10) || 0);
+  const rightParts = right.split('.').map((part) => Number.parseInt(part, 10) || 0);
+  const maxLength = Math.max(leftParts.length, rightParts.length);
+
+  for (let index = 0; index < maxLength; index += 1) {
+    const leftValue = leftParts[index] ?? 0;
+    const rightValue = rightParts[index] ?? 0;
+    if (leftValue > rightValue) return 1;
+    if (leftValue < rightValue) return -1;
+  }
+
+  return 0;
 }
 
 export const furiganaService = new FuriganaService();

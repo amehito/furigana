@@ -69,7 +69,7 @@ export function ErrorReportModal({
     payload.append('entry.1330580616', word);
     payload.append('entry.721528465', buildReportContext(reportContext, suggestedReading));
     payload.append('entry.54097300', currentUrl);
-    payload.append('entry.1774717866', selectedType);
+    payload.append('entry.1644994052', selectedType);
     payload.append('entry.1136462363', buildExtraNote(remark, suggestedReading));
 
     try {

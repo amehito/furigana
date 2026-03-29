@@ -13,6 +13,7 @@ import {
 import './App.css';
 
 const ICON_PROPS = { size: 16, strokeWidth: 1.5 };
+const PATCH_NOTICE_STORAGE_KEY = 'furigana_patch_notice';
 
 const TRANSLATOR_OPTIONS: Array<{ label: string; value: TranslatorEngine }> = [
   { label: 'Google 翻译', value: 'google' },
@@ -77,13 +78,15 @@ function App() {
   const [tagDraft, setTagDraft] = useState('');
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [saveState, setSaveState] = useState<SaveState>('idle');
+  const [patchNotice, setPatchNotice] = useState('');
   const saveTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
     const loadSettings = async () => {
-      const result = await browser.storage.local.get(['tooltipSettings', 'extensionSettings']);
+      const result = await browser.storage.local.get(['tooltipSettings', 'extensionSettings', PATCH_NOTICE_STORAGE_KEY]);
       setSettings({ ...DEFAULT_SETTINGS, ...(result.tooltipSettings ?? {}) });
       setExtensionSettings({ ...DEFAULT_EXTENSION_SETTINGS, ...(result.extensionSettings ?? {}) });
+      setPatchNotice(typeof result[PATCH_NOTICE_STORAGE_KEY] === 'string' ? result[PATCH_NOTICE_STORAGE_KEY] : '');
     };
 
     const loadCurrentHost = async () => {
@@ -232,6 +235,17 @@ function App() {
       </header>
 
       <main className="weicheng-dashboard-body">
+        {patchNotice ? (
+          <section className="weicheng-card weicheng-card--notice">
+            <div className="weicheng-card__header">
+              <div>
+                <h2 className="weicheng-card__title">更新提醒</h2>
+                <p className="weicheng-card__desc">{patchNotice}</p>
+              </div>
+            </div>
+          </section>
+        ) : null}
+
         <section className="weicheng-card">
           <div className="weicheng-card__header">
             <div>

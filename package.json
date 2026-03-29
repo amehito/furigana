@@ -12,6 +12,8 @@
     "zip": "wxt zip",
     "zip:firefox": "wxt zip -b firefox",
     "compile": "tsc --noEmit",
+    "test": "vitest",
+    "coverage": "vitest run --coverage",
     "postinstall": "wxt prepare"
   },
   "dependencies": {
@@ -19,6 +21,7 @@
     "lucide-react": "^1.7.0",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
+    "vitest": "^4.1.2",
     "wanakana": "^5.3.1"
   },
   "devDependencies": {

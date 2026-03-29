@@ -19,7 +19,7 @@ const styleId = 'furigana-dynamic-style';
 const reportModalId = 'weicheng-report-root';
 const MAX_TOOLTIP_CHARS = 100;
 const WORD_CARD_CHARS = 7;
-const KANJI_PATTERN = /[\u4E00-\u9FFF]/;
+const JAPANESE_TEXT_PATTERN = /[\u3040-\u30FF\u31F0-\u31FF\u4E00-\u9FFF]/;
 const LUCIDE_ICON_SIZE = 16;
 const LUCIDE_ICON_STROKE = 1.5;
 type SelectionContext = { prev: string; next: string };
@@ -178,7 +178,7 @@ export default defineContentScript({
         return;
       }
 
-      if (!KANJI_PATTERN.test(selectedText)) {
+      if (!JAPANESE_TEXT_PATTERN.test(selectedText)) {
         overlay.style.display = 'none';
         return;
       }
