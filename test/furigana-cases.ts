@@ -114,10 +114,13 @@ export const BACKLOG_CONVERT_CASES: BacklogConvertCase[] = [
   { input: '更新', expected: 'こうしん', category: 'IT术语' },
   { input: '設定', expected: 'せってい', category: 'IT术语' },
 ];
-
-
-export const ACTIVE_CONVERT_CASES: ConvertCase[] = BACKLOG_CONVERT_CASES.map(({ category, ...rest }) => ({
-  ...rest,
-  expectedReadings: [rest.expected],
-  label: `${category} - ${rest.input}`,
-}));
+export const ACTIVE_CONVERT_CASES: ConvertCase[] = [
+  { label: '熟字訓 - 誕生日', input: '誕生日', expectedReadings: ['たんじょうび'] },
+  { label: '送假名 - 懐かしい', input: '懐かしい', expectedReadings: ['なつかしい'] },
+  { label: '数字助数词 - 5歳', input: '5歳', expectedReadings: ['ごさい'] },
+  { label: '数字助数词 - 3本', input: '3本', expectedReadings: ['さんぼん'] },
+  { label: '数字助数词 - 1300台', input: '1300台', expectedReadings: ['せんさんびゃくだい'] },
+  { label: '人名 - 田中', input: '田中', expectedReadings: ['たなか'] },
+  { label: 'IT术语 - 接続', input: '接続', expectedReadings: ['せつぞく'] },
+  { label: '纯假名直通', input: 'こんにちは', expectedHtml: 'こんにちは' },
+];

@@ -6,7 +6,7 @@ export const DEFAULT_CONTEXT = {
 export const KANJI_PATTERN = /[\u4E00-\u9FFF]/;
 export const ALL_KANJI_PATTERN = /^[\u4E00-\u9FFF]+$/;
 export const OKURIGANA_PATTERN = /^([\u4E00-\u9FFF]+)([ぁ-ん]+)$/;
-export const NUMERIC_COUNTER_PATTERN = /^(\d+)(歳|才|人|日|時|分|月|年|回|階|本|枚|匹|円)/;
+export const NUMERIC_COUNTER_PATTERN = /^(\d+)(歳|才|人|日|時|分|月|年|回|階|本|枚|匹|円|台)/;
 
 export const DIGIT_READINGS = ['', 'いち', 'に', 'さん', 'よん', 'ご', 'ろく', 'なな', 'はち', 'きゅう'];
 export const LARGE_NUMBER_UNITS = ['', 'まん', 'おく', 'ちょう'];
@@ -103,6 +103,7 @@ export const NUMERIC_COUNTER_READING_MAP = {
     枚: 'まい',
     匹: 'ひき',
     円: 'えん',
+    台: 'だい',
   },
   exact: {
     '1人': 'ひとり',

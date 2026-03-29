@@ -249,6 +249,7 @@ class FuriganaProcessor {
       case '時':
       case '枚':
       case '円':
+      case '台':
         return `${baseReading}${this.numericCounterConfig.suffixes[suffix]}`;
       case '人':
         return this.buildPeopleReading(number, baseReading);
