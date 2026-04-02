@@ -32,6 +32,7 @@ const TRANSLATOR_OPTIONS: Array<{ label: string; value: TranslatorEngine }> = [
 const FURIGANA_MODE_OPTIONS: Array<{ label: string; value: FuriganaMode }> = [
   { label: '智能模式 (Smart)', value: 'smart' },
   { label: '全文显示 (All)', value: 'all' },
+  { label: '完全禁用 (Disable)', value: 'disable' },
 ];
 
 const TOOLTIP_PRESETS: Array<{ label: string; settings: Partial<TooltipSettings> }> = [

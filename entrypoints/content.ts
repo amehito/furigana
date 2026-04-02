@@ -5,13 +5,6 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { Flag, Languages, LoaderCircle, Pin, PinOff, Star, Volume2 } from 'lucide-react';
 import { furiganaService } from '../util/common';
 import type { ExtractedPageBlock } from '../util/export-workspace';
-import {
-  FAVORITES_LIMIT,
-  FAVORITES_STORAGE_KEY,
-  createFavoriteItem,
-  matchFavorite,
-  normalizeFavoriteItems,
-} from '../util/favorites';
 import { browser } from 'wxt/browser';
 import {
   DEFAULT_EXTENSION_SETTINGS,
@@ -259,42 +252,26 @@ export default defineContentScript({
       }
     });
 
-    const getFavorites = async () => {
-      const data = await browser.storage.local.get(FAVORITES_STORAGE_KEY);
-      return normalizeFavoriteItems(data[FAVORITES_STORAGE_KEY]);
+    const getFavorites = async (): Promise<string[]> => {
+      const data = await browser.storage.local.get('favorites');
+      return Array.isArray(data.favorites) ? data.favorites : [];
     };
 
-    const setFavorites = async (list: ReturnType<typeof normalizeFavoriteItems>) => {
-      await browser.storage.local.set({ [FAVORITES_STORAGE_KEY]: list });
+    const setFavorites = async (list: string[]) => {
+      await browser.storage.local.set({ favorites: list });
     };
 
     const isFavorite = async (word: string) => {
       const list = await getFavorites();
-      return list.some((item) => matchFavorite(item, { text: word, sourceUrl: window.location.href }));
+      return list.includes(word);
     };
 
-    const toggleFavorite = async (word: string, context: SelectionContext) => {
+    const toggleFavorite = async (word: string) => {
       const list = await getFavorites();
-      const exists = list.some((item) => matchFavorite(item, { text: word, sourceUrl: window.location.href }));
-      if (!exists && list.length >= FAVORITES_LIMIT) {
-        window.alert('警告：认知负荷已达上限！不消灭这些“死角”，新知识将无法进入。');
-        return { active: false, full: true };
-      }
-
-      const next = exists
-        ? list.filter((item) => !matchFavorite(item, { text: word, sourceUrl: window.location.href }))
-        : [
-            createFavoriteItem({
-              text: word,
-              furigana: await furiganaService.convert(word, context),
-              sourceUrl: window.location.href,
-              timestamp: Date.now(),
-              context: formatReportContext(word, context),
-            }),
-            ...list,
-          ];
+      const exists = list.includes(word);
+      const next = exists ? list.filter((it) => it !== word) : [...list, word];
       await setFavorites(next);
-      return { active: !exists, full: false };
+      return !exists;
     };
 
     const playAudio = (text: string, triggerButton?: HTMLButtonElement | null) => {
@@ -465,8 +442,6 @@ export default defineContentScript({
       const rubyHtml = await furiganaService.convert(text, context);
       const entityType = furiganaService.getEntityType(text);
       const fav = await isFavorite(text);
-      const favoriteItems = await getFavorites();
-      const inboxFull = !fav && favoriteItems.length >= FAVORITES_LIMIT;
       const tagLabel = entityType === 'place'
         ? '地名'
         : entityType === 'person'
@@ -485,7 +460,7 @@ export default defineContentScript({
           </div>
           <div class="word-card-bottom-actions">
             <button aria-label="翻译" class="word-card-btn icon-btn translate-btn" title="翻译" type="button">${buildButtonContent(audioIcons.translate, '')}</button>
-            <button aria-label="${fav ? '取消收藏' : inboxFull ? '收藏已满' : '添加收藏'}" class="word-card-btn icon-btn favorite-btn ${fav ? 'is-active' : ''}" title="${fav ? '取消收藏' : inboxFull ? '收藏已满，请先清理 Inbox' : '添加收藏'}" type="button" ${inboxFull ? 'data-full="true"' : ''}>${buildButtonContent(audioIcons.favorite, '')}</button>
+            <button aria-label="${fav ? '取消收藏' : '添加收藏'}" class="word-card-btn icon-btn favorite-btn ${fav ? 'is-active' : ''}" title="${fav ? '取消收藏' : '添加收藏'}" type="button">${buildButtonContent(audioIcons.favorite, '')}</button>
             <button aria-label="播放音频" class="word-card-btn icon-btn audio-btn" title="播放音频" type="button">${buildButtonContent(audioIcons.play, '')}</button>
             <button aria-label="错误反馈" class="word-card-btn icon-btn report-btn" title="错误反馈" type="button">${buildButtonContent(audioIcons.report, '')}</button>
           </div>
@@ -504,15 +479,12 @@ export default defineContentScript({
 
       overlay.querySelector<HTMLButtonElement>('.favorite-btn')?.addEventListener('click', async (e) => {
         e.preventDefault();
-        const result = await toggleFavorite(text, context);
-        if (result.full) {
-          return;
-        }
+        const nowFav = await toggleFavorite(text);
         const btn = overlay.querySelector<HTMLButtonElement>('.favorite-btn');
         if (btn) {
-          btn.classList.toggle('is-active', result.active);
-          btn.setAttribute('aria-label', result.active ? '取消收藏' : '添加收藏');
-          btn.setAttribute('title', result.active ? '取消收藏' : '添加收藏');
+          btn.classList.toggle('is-active', nowFav);
+          btn.setAttribute('aria-label', nowFav ? '取消收藏' : '添加收藏');
+          btn.setAttribute('title', nowFav ? '取消收藏' : '添加收藏');
         }
       });
 

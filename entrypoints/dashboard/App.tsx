@@ -1,23 +1,15 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   BookMarked,
-  Eraser,
-  CheckCircle2,
-  ExternalLink,
   ChevronUp,
   Download,
   FileText,
-  Languages,
-  PencilLine,
   Printer,
   RefreshCw,
   Trash2,
-  Volume2,
-  X,
 } from 'lucide-react';
 import { browser } from 'wxt/browser';
 import { furiganaService } from '../../util/common';
-import { DEFAULT_EXTENSION_SETTINGS, type ExtensionSettings, type TranslatorEngine } from '../../types/settings';
 import {
   EXPORT_DRAFTS_STORAGE_KEY,
   EXPORT_HISTORY_STORAGE_KEY,
@@ -30,48 +22,18 @@ import {
   isDraftStale,
   tokensToHtml,
 } from '../../util/export-workspace';
-import {
-  FAVORITES_LIMIT,
-  FAVORITES_STORAGE_KEY,
-  type FavoriteItem,
-  normalizeFavoriteItems,
-} from '../../util/favorites';
 
 const ICON_PROPS = { size: 24, strokeWidth: 1.75 };
 type MenuKey = 'print' | 'favorites';
-const FULL_LOAD_MESSAGE = '警告：认知负荷已达上限！不消灭这些“死角”，新知识将无法进入。';
-
-const TRANSLATOR_URL_BUILDERS: Record<TranslatorEngine, (text: string) => string> = {
-  google: (text) => `https://translate.google.com/?sl=ja&tl=zh-CN&text=${encodeURIComponent(text)}&op=translate`,
-  deepl: (text) => `https://www.deepl.com/translator#ja/zh-hans/${encodeURIComponent(text)}`,
-  bing: (text) => `https://www.bing.com/translator?from=ja&to=zh-Hans&text=${encodeURIComponent(text)}`,
-  papago: (text) => `https://papago.naver.com/?sk=ja&tk=zh-CN&st=${encodeURIComponent(text)}`,
-};
-const KANA_DISTRACTOR_POOL = ['あ', 'い', 'う', 'え', 'お', 'か', 'き', 'く', 'け', 'こ', 'さ', 'し', 'す', 'せ', 'そ', 'た', 'ち', 'つ', 'て', 'と', 'な', 'に', 'ぬ', 'ね', 'の', 'は', 'ひ', 'ふ', 'へ', 'ほ', 'ま', 'み', 'む', 'め', 'も', 'や', 'ゆ', 'よ', 'ら', 'り', 'る', 'れ', 'ろ', 'わ', 'ん', 'きゃ', 'きゅ', 'きょ', 'しゃ', 'しゅ', 'しょ', 'ちゃ', 'ちゅ', 'ちょ', 'にゃ', 'にゅ', 'にょ', 'ひゃ', 'ひゅ', 'ひょ', 'みゃ', 'みゅ', 'みょ', 'りゃ', 'りゅ', 'りょ', 'っ', 'ー'];
-
-type ReviewChoice = {
-  id: string;
-  text: string;
-  isDistractor: boolean;
-};
 
 function App() {
   const [draft, setDraft] = useState<ExportWorkspaceDraft | null>(null);
-  const [favorites, setFavorites] = useState<FavoriteItem[]>([]);
+  const [favorites, setFavorites] = useState<string[]>([]);
   const [history, setHistory] = useState<ExportHistoryItem[]>([]);
   const [activeMenu, setActiveMenu] = useState<MenuKey>('print');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [showBackToTop, setShowBackToTop] = useState(false);
-  const [extensionSettings, setExtensionSettings] = useState<ExtensionSettings>(DEFAULT_EXTENSION_SETTINGS);
-  const [removingFavoriteIds, setRemovingFavoriteIds] = useState<string[]>([]);
-  const [expandedFurigana, setExpandedFurigana] = useState<Record<string, boolean>>({});
-  const [favoriteRubyMap, setFavoriteRubyMap] = useState<Record<string, string>>({});
-  const [reviewingFavorite, setReviewingFavorite] = useState<FavoriteItem | null>(null);
-  const [reviewTargetBlocks, setReviewTargetBlocks] = useState<string[]>([]);
-  const [reviewChoices, setReviewChoices] = useState<ReviewChoice[]>([]);
-  const [selectedReviewChoiceIds, setSelectedReviewChoiceIds] = useState<string[]>([]);
-  const [reviewError, setReviewError] = useState('');
 
   useEffect(() => {
     const load = async () => {
@@ -79,42 +41,22 @@ function App() {
       const storage = await browser.storage.local.get([
         EXPORT_DRAFTS_STORAGE_KEY,
         EXPORT_HISTORY_STORAGE_KEY,
-        FAVORITES_STORAGE_KEY,
-        'extensionSettings',
+        'favorites',
       ]);
 
       const draftMap = normalizeDraftMap(storage[EXPORT_DRAFTS_STORAGE_KEY]);
       const nextDraft = draftId ? draftMap[draftId] ?? null : null;
-      const nextFavorites = normalizeFavoriteItems(storage[FAVORITES_STORAGE_KEY])
-        .sort((left, right) => right.timestamp - left.timestamp);
+      const nextFavorites = Array.isArray(storage.favorites) ? storage.favorites : [];
       const nextHistory = normalizeHistory(storage[EXPORT_HISTORY_STORAGE_KEY]);
 
       setDraft(nextDraft);
       setFavorites(nextFavorites);
       setHistory(nextHistory);
-      setExtensionSettings({ ...DEFAULT_EXTENSION_SETTINGS, ...(storage.extensionSettings ?? {}) });
       setError(nextDraft ? '' : '没有找到可编辑的导出草稿，请先从 popup 发起“导出当前页面”。');
       setLoading(false);
     };
 
     void load();
-  }, []);
-
-  useEffect(() => {
-    const handleStorageChange = (changes: Record<string, { newValue?: unknown }>, areaName: string) => {
-      if (areaName !== 'local') return;
-
-      if (changes[FAVORITES_STORAGE_KEY]) {
-        setFavorites(normalizeFavoriteItems(changes[FAVORITES_STORAGE_KEY].newValue).sort((left, right) => right.timestamp - left.timestamp));
-      }
-
-      if (changes.extensionSettings) {
-        setExtensionSettings({ ...DEFAULT_EXTENSION_SETTINGS, ...(changes.extensionSettings.newValue ?? {}) });
-      }
-    };
-
-    browser.storage.onChanged.addListener(handleStorageChange);
-    return () => browser.storage.onChanged.removeListener(handleStorageChange);
   }, []);
 
   useEffect(() => {
@@ -166,65 +108,6 @@ function App() {
     [draft],
   );
 
-  const favoriteCount = favorites.length;
-  const loadPercent = Math.min(100, (favoriteCount / FAVORITES_LIMIT) * 100);
-  const inboxFull = favoriteCount >= FAVORITES_LIMIT;
-
-  const openFavoriteReview = async (item: FavoriteItem) => {
-    const rubyHtml = favoriteRubyMap[item.id] ?? item.furigana ?? await furiganaService.convert(item.text);
-    const readingText = normalizeKanaReading(extractReadingText(rubyHtml) || item.text);
-    const targetBlocks = splitKanaBlocks(readingText);
-    setFavoriteRubyMap((current) => ({ ...current, [item.id]: rubyHtml }));
-    setReviewingFavorite(item);
-    setReviewTargetBlocks(targetBlocks);
-    setReviewChoices(buildReviewChoices(targetBlocks));
-    setSelectedReviewChoiceIds([]);
-    setReviewError('');
-  };
-
-  const closeFavoriteReview = () => {
-    setReviewingFavorite(null);
-    setReviewTargetBlocks([]);
-    setReviewChoices([]);
-    setSelectedReviewChoiceIds([]);
-    setReviewError('');
-  };
-
-  const selectReviewChoice = async (choice: ReviewChoice) => {
-    if (!reviewingFavorite || !reviewTargetBlocks.length) return;
-    if (selectedReviewChoiceIds.includes(choice.id)) return;
-
-    const nextSelectedIds = [...selectedReviewChoiceIds, choice.id];
-    setSelectedReviewChoiceIds(nextSelectedIds);
-
-    const selectedText = nextSelectedIds
-      .map((id) => reviewChoices.find((item) => item.id === id)?.text ?? '')
-      .filter(Boolean)
-      .join('');
-    const targetReading = reviewTargetBlocks.join('');
-
-    if (targetReading.startsWith(selectedText)) {
-      setReviewError('');
-      if (selectedText === targetReading) {
-        await completeFavorite(reviewingFavorite.id, setFavorites, setRemovingFavoriteIds);
-        closeFavoriteReview();
-      }
-      return;
-    }
-
-    setReviewError('这个发音不对，试着重新拼一次。');
-  };
-
-  const removeSelectedReviewChoice = (choiceId: string) => {
-    setSelectedReviewChoiceIds((current) => current.filter((id) => id !== choiceId));
-    setReviewError('');
-  };
-
-  const resetReviewInput = () => {
-    setSelectedReviewChoiceIds([]);
-    setReviewError('');
-  };
-
   const renderMain = () => {
     if (loading) {
       return <div className="workspace-empty">正在载入导出工作台...</div>;
@@ -232,45 +115,24 @@ function App() {
 
     if (activeMenu === 'favorites') {
       return (
-        <section className="workspace-panel workspace-panel--favorites">
+        <section className="workspace-panel">
           <div className="workspace-panel__header">
             <div>
               <p className="workspace-kicker">收藏记录</p>
-              <h2>待办词条 Inbox</h2>
-              <p className="workspace-meta">收藏不是仓库，而是等待被你学习并消灭的任务堆。</p>
+              <h2>已收藏词条</h2>
             </div>
           </div>
-
-          <section className={`favorites-load ${inboxFull ? 'is-full' : ''}`}>
-            <div className="favorites-load__header">
-              <strong>当前负荷：{favoriteCount} / {FAVORITES_LIMIT}</strong>
-              <span>{inboxFull ? '已锁定新增' : '继续清空它们'}</span>
-            </div>
-            <div className="favorites-load__track">
-              <div className="favorites-load__bar" style={{ width: `${loadPercent}%` }} />
-            </div>
-            {inboxFull ? <p className="favorites-load__warning">{FULL_LOAD_MESSAGE}</p> : null}
-          </section>
 
           {favorites.length ? (
             <div className="favorites-grid">
               {favorites.map((item) => (
-                <FavoriteInboxCard
-                  extensionSettings={extensionSettings}
-                  item={item}
-                  isRemoving={removingFavoriteIds.includes(item.id)}
-                  key={item.id}
-                  onComplete={() => void openFavoriteReview(item)}
-                  onJumpToSource={() => void openSourceUrl(item.sourceUrl)}
-                  onQuickSpeak={() => playAudio(item.text)}
-                  onToggleFurigana={() => void toggleFavoriteFurigana(item, expandedFurigana, setExpandedFurigana, favoriteRubyMap, setFavoriteRubyMap)}
-                  rubyHtml={favoriteRubyMap[item.id] ?? item.furigana ?? ''}
-                  showFurigana={Boolean(expandedFurigana[item.id])}
-                />
+                <article className="favorite-card" key={item}>
+                  <p className="favorite-card__word">{item}</p>
+                </article>
               ))}
             </div>
           ) : (
-            <div className="workspace-empty">空山基：你的大脑目前一身轻松，去摄入新内容吧。</div>
+            <div className="workspace-empty">当前还没有收藏记录，划词卡片里的收藏会同步显示在这里。</div>
           )}
         </section>
       );
@@ -498,23 +360,6 @@ function App() {
 
       <main className="workspace-main">{renderMain()}</main>
 
-      {reviewingFavorite ? (
-        <FavoriteReviewDialog
-          availableChoices={reviewChoices.filter((choice) => !selectedReviewChoiceIds.includes(choice.id))}
-          item={reviewingFavorite}
-          onClose={closeFavoriteReview}
-          onPickChoice={(choice) => void selectReviewChoice(choice)}
-          onRemoveChoice={removeSelectedReviewChoice}
-          onReset={resetReviewInput}
-          reviewError={reviewError}
-          reviewReading={reviewTargetBlocks.join('')}
-          rubyHtml={favoriteRubyMap[reviewingFavorite.id] ?? reviewingFavorite.furigana ?? ''}
-          selectedChoices={selectedReviewChoiceIds
-            .map((id) => reviewChoices.find((choice) => choice.id === id))
-            .filter((choice): choice is ReviewChoice => Boolean(choice))}
-        />
-      ) : null}
-
       <button
         aria-label="回到顶部"
         className={`back-to-top ${showBackToTop ? 'is-visible' : ''}`}
@@ -668,478 +513,4 @@ function formatDateTime(value: string) {
   }).format(new Date(value));
 }
 
-function FavoriteInboxCard({
-  item,
-  extensionSettings,
-  isRemoving,
-  onComplete,
-  onJumpToSource,
-  onQuickSpeak,
-  onToggleFurigana,
-  rubyHtml,
-  showFurigana,
-}: {
-  item: FavoriteItem;
-  extensionSettings: ExtensionSettings;
-  isRemoving: boolean;
-  onComplete: () => void;
-  onJumpToSource: () => void;
-  onQuickSpeak: () => void;
-  onToggleFurigana: () => void;
-  rubyHtml: string;
-  showFurigana: boolean;
-}) {
-  const ageState = getFavoriteAgeState(item.timestamp);
-  const translatedUrl = buildTranslatorUrl(item.text, extensionSettings.translatorEngine);
-
-  return (
-    <article
-      className={`favorite-card favorite-card--${ageState.level} ${isRemoving ? 'is-removing' : ''}`}
-      onClick={onQuickSpeak}
-    >
-      <div className="favorite-card__top">
-        <label className="favorite-card__complete" onClick={(event) => event.stopPropagation()}>
-          <input aria-label="掌握并删除" onChange={onComplete} type="checkbox" />
-          <span className="favorite-card__complete-mark">
-            <CheckCircle2 size={18} strokeWidth={1.8} />
-          </span>
-        </label>
-
-        <div className="favorite-card__meta">
-          <span className="favorite-card__age">{ageState.label}</span>
-          <span className="favorite-card__time">{formatRelativeAge(item.timestamp)}</span>
-        </div>
-      </div>
-
-      <div className="favorite-card__body">
-        <p className="favorite-card__word">{item.text}</p>
-        {showFurigana ? (
-          <div className="favorite-card__ruby" dangerouslySetInnerHTML={{ __html: rubyHtml || item.text }} />
-        ) : null}
-        {item.context ? <p className="favorite-card__context">{item.context}</p> : null}
-      </div>
-
-      <div className="favorite-card__actions" onClick={(event) => event.stopPropagation()}>
-        <button className="favorite-card__action" onClick={onQuickSpeak} type="button">
-          <Volume2 size={18} strokeWidth={1.8} />
-          <span>朗读</span>
-        </button>
-        <button className="favorite-card__action" onClick={onToggleFurigana} type="button">
-          <BookMarked size={18} strokeWidth={1.8} />
-          <span>{showFurigana ? '隐藏注音' : '注音'}</span>
-        </button>
-        <button className="favorite-card__action" onClick={() => window.open(translatedUrl, '_blank', 'noopener,noreferrer')} type="button">
-          <Languages size={18} strokeWidth={1.8} />
-          <span>翻译跳转</span>
-        </button>
-        <button className="favorite-card__action" onClick={onJumpToSource} type="button">
-          <ExternalLink size={18} strokeWidth={1.8} />
-          <span>来源追溯</span>
-        </button>
-      </div>
-    </article>
-  );
-}
-
-async function completeFavorite(
-  favoriteId: string,
-  setFavorites: React.Dispatch<React.SetStateAction<FavoriteItem[]>>,
-  setRemovingFavoriteIds: React.Dispatch<React.SetStateAction<string[]>>,
-) {
-  setRemovingFavoriteIds((current) => current.includes(favoriteId) ? current : [...current, favoriteId]);
-
-  window.setTimeout(async () => {
-    const storage = await browser.storage.local.get([FAVORITES_STORAGE_KEY]);
-    const nextFavorites = normalizeFavoriteItems(storage[FAVORITES_STORAGE_KEY]).filter((item) => item.id !== favoriteId);
-    await browser.storage.local.set({ [FAVORITES_STORAGE_KEY]: nextFavorites });
-    setFavorites(nextFavorites);
-    setRemovingFavoriteIds((current) => current.filter((item) => item !== favoriteId));
-  }, 240);
-}
-
-async function toggleFavoriteFurigana(
-  item: FavoriteItem,
-  expandedFurigana: Record<string, boolean>,
-  setExpandedFurigana: React.Dispatch<React.SetStateAction<Record<string, boolean>>>,
-  favoriteRubyMap: Record<string, string>,
-  setFavoriteRubyMap: React.Dispatch<React.SetStateAction<Record<string, string>>>,
-) {
-  const nextExpanded = !expandedFurigana[item.id];
-  setExpandedFurigana((current) => ({ ...current, [item.id]: nextExpanded }));
-
-  if (!nextExpanded || favoriteRubyMap[item.id]) return;
-
-  const html = item.furigana || await furiganaService.convert(item.text);
-  setFavoriteRubyMap((current) => ({ ...current, [item.id]: html }));
-}
-
-function playAudio(text: string) {
-  const chromeLike = globalThis as typeof globalThis & {
-    chrome?: {
-      tts?: {
-        stop?: () => void;
-        speak?: (text: string, options?: Record<string, unknown>) => void;
-      };
-    };
-  };
-
-  const tts = chromeLike.chrome?.tts;
-  if (tts?.speak) {
-    tts.stop?.();
-    tts.speak(text, { lang: 'ja-JP', rate: 0.9, volume: 1 });
-    return;
-  }
-
-  if (window.speechSynthesis) {
-    window.speechSynthesis.cancel();
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = 'ja-JP';
-    utterance.rate = 0.9;
-    utterance.volume = 1;
-    window.speechSynthesis.speak(utterance);
-  }
-}
-
-async function openSourceUrl(sourceUrl: string) {
-  if (!sourceUrl) return;
-  await browser.tabs.create({ url: sourceUrl });
-}
-
-function buildTranslatorUrl(text: string, engine: TranslatorEngine) {
-  const builder = TRANSLATOR_URL_BUILDERS[engine] ?? TRANSLATOR_URL_BUILDERS.google;
-  return builder(text);
-}
-
-function getFavoriteAgeState(timestamp: number) {
-  const hours = (Date.now() - timestamp) / (1000 * 60 * 60);
-  if (hours >= 72) return { level: 'critical', label: '铁锈警报' } as const;
-  if (hours >= 24) return { level: 'warning', label: '已堆积' } as const;
-  return { level: 'fresh', label: '新鲜输入' } as const;
-}
-
-function formatRelativeAge(timestamp: number) {
-  const diffMs = Date.now() - timestamp;
-  const hours = Math.floor(diffMs / (1000 * 60 * 60));
-  if (hours < 1) {
-    const minutes = Math.max(1, Math.floor(diffMs / (1000 * 60)) || 1);
-    return `${minutes} 分钟前`;
-  }
-  if (hours < 24) return `${hours} 小时前`;
-  return `${Math.floor(hours / 24)} 天前`;
-}
-
-function extractReadingText(rubyHtml: string) {
-  return Array.from(rubyHtml.matchAll(/<rt>(.*?)<\/rt>/g))
-    .map((match) => match[1] ?? '')
-    .join('');
-}
-
-function normalizeKanaReading(value: string) {
-  return value.replace(/[\u30a1-\u30f6]/g, (char) => String.fromCharCode(char.charCodeAt(0) - 0x60));
-}
-
-function splitKanaBlocks(value: string) {
-  const chars = Array.from(value);
-  const blocks: string[] = [];
-
-  for (let index = 0; index < chars.length; index += 1) {
-    const current = chars[index];
-    const next = chars[index + 1];
-    if (next && /[ゃゅょぁぃぅぇぉ]/.test(next)) {
-      blocks.push(`${current}${next}`);
-      index += 1;
-      continue;
-    }
-
-    blocks.push(current);
-  }
-
-  return blocks;
-}
-
-function buildReviewChoices(targetBlocks: string[]) {
-  const distractorCount = Math.max(1, Math.round(targetBlocks.length / 3));
-  const distractors = shuffleArray(
-    KANA_DISTRACTOR_POOL.filter((item) => !targetBlocks.includes(item)),
-  ).slice(0, distractorCount);
-
-  return shuffleArray([
-    ...targetBlocks.map((text, index) => ({
-      id: `target-${index}-${text}`,
-      text,
-      isDistractor: false,
-    })),
-    ...distractors.map((text, index) => ({
-      id: `distractor-${index}-${text}`,
-      text,
-      isDistractor: true,
-    })),
-  ]);
-}
-
-function shuffleArray<T>(value: T[]) {
-  const next = [...value];
-  for (let index = next.length - 1; index > 0; index -= 1) {
-    const swapIndex = Math.floor(Math.random() * (index + 1));
-    [next[index], next[swapIndex]] = [next[swapIndex], next[index]];
-  }
-  return next;
-}
-
-function drawPracticeCanvas(context: CanvasRenderingContext2D, size: number, text: string) {
-  context.clearRect(0, 0, size, size);
-  context.fillStyle = '#fffdfa';
-  context.fillRect(0, 0, size, size);
-
-  context.strokeStyle = 'rgba(157, 69, 38, 0.18)';
-  context.lineWidth = 1;
-
-  context.strokeRect(12, 12, size - 24, size - 24);
-  context.beginPath();
-  context.moveTo(size / 2, 12);
-  context.lineTo(size / 2, size - 12);
-  context.moveTo(12, size / 2);
-  context.lineTo(size - 12, size / 2);
-  context.moveTo(12, 12);
-  context.lineTo(size - 12, size - 12);
-  context.moveTo(size - 12, 12);
-  context.lineTo(12, size - 12);
-  context.stroke();
-
-  const glyphs = Array.from(text).filter((char) => /[\u3040-\u30ff\u4e00-\u9fff]/i.test(char)).slice(0, 4);
-  context.fillStyle = 'rgba(182, 91, 58, 0.12)';
-  context.textAlign = 'center';
-  context.textBaseline = 'middle';
-  context.font = '128px "Hiragino Mincho ProN", "Yu Mincho", serif';
-
-  glyphs.forEach((glyph, index) => {
-    const x = index % 2 === 0 ? size * 0.3 : size * 0.7;
-    const y = index < 2 ? size * 0.3 : size * 0.7;
-    context.fillText(glyph, x, y);
-  });
-}
-
-function getCanvasPoint(event: React.PointerEvent<HTMLCanvasElement>) {
-  const rect = event.currentTarget.getBoundingClientRect();
-  return { x: event.clientX - rect.left, y: event.clientY - rect.top };
-}
-
 export default App;
-
-function FavoriteReviewDialog({
-  availableChoices,
-  item,
-  onClose,
-  onPickChoice,
-  onRemoveChoice,
-  onReset,
-  reviewError,
-  reviewReading,
-  rubyHtml,
-  selectedChoices,
-}: {
-  availableChoices: ReviewChoice[];
-  item: FavoriteItem;
-  onClose: () => void;
-  onPickChoice: (choice: ReviewChoice) => void;
-  onRemoveChoice: (choiceId: string) => void;
-  onReset: () => void;
-  reviewError: string;
-  reviewReading: string;
-  rubyHtml: string;
-  selectedChoices: ReviewChoice[];
-}) {
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const drawingRef = useRef(false);
-  const lastPointRef = useRef<{ x: number; y: number } | null>(null);
-  const strokesRef = useRef<Array<Array<{ x: number; y: number }>>>([]);
-  const activeStrokeRef = useRef<Array<{ x: number; y: number }> | null>(null);
-  const CANVAS_SIZE = 320;
-
-  const redrawCanvas = () => {
-    const canvas = canvasRef.current;
-    const context = canvas?.getContext('2d');
-    if (!canvas || !context) return;
-
-    drawPracticeCanvas(context, CANVAS_SIZE, item.text);
-    strokesRef.current.forEach((stroke) => {
-      if (stroke.length < 2) return;
-      context.strokeStyle = '#8e3d22';
-      context.lineWidth = 5;
-      context.lineCap = 'round';
-      context.lineJoin = 'round';
-      context.beginPath();
-      context.moveTo(stroke[0]!.x, stroke[0]!.y);
-      for (let index = 1; index < stroke.length; index += 1) {
-        const point = stroke[index]!;
-        context.lineTo(point.x, point.y);
-      }
-      context.stroke();
-    });
-  };
-
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-
-    const ratio = window.devicePixelRatio || 1;
-    const size = 320;
-    canvas.width = size * ratio;
-    canvas.height = size * ratio;
-    canvas.style.width = `${size}px`;
-    canvas.style.height = `${size}px`;
-
-    const context = canvas.getContext('2d');
-    if (!context) return;
-    context.setTransform(ratio, 0, 0, ratio, 0, 0);
-    strokesRef.current = [];
-    activeStrokeRef.current = null;
-    drawPracticeCanvas(context, size, item.text);
-  }, [item.text]);
-
-  const drawStroke = (event: React.PointerEvent<HTMLCanvasElement>) => {
-    const canvas = canvasRef.current;
-    const context = canvas?.getContext('2d');
-    if (!canvas || !context || !drawingRef.current) return;
-
-    const rect = canvas.getBoundingClientRect();
-    const point = { x: event.clientX - rect.left, y: event.clientY - rect.top };
-    if (!lastPointRef.current) {
-      lastPointRef.current = point;
-      activeStrokeRef.current = [point];
-      return;
-    }
-
-    activeStrokeRef.current?.push(point);
-
-    context.strokeStyle = '#8e3d22';
-    context.lineWidth = 5;
-    context.lineCap = 'round';
-    context.lineJoin = 'round';
-    context.beginPath();
-    context.moveTo(lastPointRef.current.x, lastPointRef.current.y);
-    context.lineTo(point.x, point.y);
-    context.stroke();
-    lastPointRef.current = point;
-  };
-
-  const clearCanvas = () => {
-    strokesRef.current = [];
-    activeStrokeRef.current = null;
-    redrawCanvas();
-  };
-
-  const undoLastStroke = () => {
-    strokesRef.current = strokesRef.current.slice(0, -1);
-    activeStrokeRef.current = null;
-    redrawCanvas();
-  };
-
-  const resetAll = () => {
-    clearCanvas();
-    onReset();
-  };
-
-  return (
-    <div className="favorite-review-backdrop" onClick={onClose} role="presentation">
-      <dialog aria-modal="true" className="favorite-review-dialog" onClick={(event) => event.stopPropagation()} open>
-        <div className="favorite-review-dialog__header">
-          <div>
-            <p className="workspace-kicker">掌握确认</p>
-            <h2>写一写，再把读音拼对</h2>
-          </div>
-          <button className="favorite-review-dialog__close" onClick={onClose} type="button">
-            <X size={18} strokeWidth={1.8} />
-          </button>
-        </div>
-
-        <div className="favorite-review-dialog__body">
-          <div className="favorite-review-dialog__meta">
-            <p className="favorite-review-dialog__word">{item.text}</p>
-            <div className="favorite-review-dialog__ruby" dangerouslySetInnerHTML={{ __html: rubyHtml || item.text }} />
-          </div>
-
-          <div className="favorite-review-practice">
-            <canvas
-              className="favorite-review-practice__canvas"
-              onPointerDown={(event) => {
-                drawingRef.current = true;
-                const startPoint = getCanvasPoint(event);
-                lastPointRef.current = startPoint;
-                activeStrokeRef.current = [startPoint];
-              }}
-              onPointerLeave={() => {
-                drawingRef.current = false;
-                lastPointRef.current = null;
-                if (activeStrokeRef.current?.length) {
-                  strokesRef.current = [...strokesRef.current, activeStrokeRef.current];
-                }
-                activeStrokeRef.current = null;
-              }}
-              onPointerMove={drawStroke}
-              onPointerUp={() => {
-                drawingRef.current = false;
-                lastPointRef.current = null;
-                if (activeStrokeRef.current?.length) {
-                  strokesRef.current = [...strokesRef.current, activeStrokeRef.current];
-                }
-                activeStrokeRef.current = null;
-              }}
-              ref={canvasRef}
-            />
-            <div className="favorite-review-practice__actions">
-              <button className="favorite-card__action" onClick={clearCanvas} type="button">
-                <Eraser size={18} strokeWidth={1.8} />
-                <span>清除</span>
-              </button>
-              <button className="favorite-card__action" onClick={undoLastStroke} type="button">
-                <PencilLine size={18} strokeWidth={1.8} />
-                <span>撤销一笔</span>
-              </button>
-              <button className="favorite-card__action" onClick={resetAll} type="button">
-                <X size={18} strokeWidth={1.8} />
-                <span>重置选择</span>
-              </button>
-            </div>
-          </div>
-
-          <div className="favorite-review-keyboard">
-            <div className="favorite-review-keyboard__status">
-              <p>从下面的音块里选出正确发音，外来语也会转成平假名来练习。</p>
-              <div className={`favorite-review-keyboard__input ${reviewError ? 'has-error' : ''}`}>
-                <div className="favorite-review-keyboard__selected">
-                  {selectedChoices.length ? selectedChoices.map((choice) => (
-                    <button
-                      className="favorite-review-keyboard__chip favorite-review-keyboard__chip--selected"
-                      key={choice.id}
-                      onClick={() => onRemoveChoice(choice.id)}
-                      type="button"
-                    >
-                      <span>{choice.text}</span>
-                      <X size={12} strokeWidth={2} />
-                    </button>
-                  )) : <span className="favorite-review-keyboard__placeholder">点下面的方块来组成发音</span>}
-                </div>
-                <small>{reviewReading || 'loading'}</small>
-              </div>
-              {reviewError ? <p className="favorite-review-keyboard__error">{reviewError}</p> : null}
-            </div>
-
-            <div className="favorite-review-keyboard__grid">
-              {availableChoices.map((choice) => (
-                <button
-                  className={`favorite-review-keyboard__key ${choice.isDistractor ? 'is-distractor' : ''}`}
-                  key={choice.id}
-                  onClick={() => onPickChoice(choice)}
-                  type="button"
-                >
-                  {choice.text}
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
-      </dialog>
-    </div>
-  );
-}
