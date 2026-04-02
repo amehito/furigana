@@ -562,7 +562,7 @@ class FuriganaService {
   async convert(text: string, context: ConvertContext = DEFAULT_CONTEXT): Promise<string> {
     await this.init();
     this.ensureProcessor();
-    return this.processor.process(text, context);
+    return this.processor!.process(text, context);
   }
 
   getEntityType(text: string): EntityType {

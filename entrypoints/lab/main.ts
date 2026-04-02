@@ -8,8 +8,6 @@ type LabRow = {
 
 if (import.meta.env.MODE === 'production') {
   document.body.innerHTML = "<h1>403 Forbidden</h1><p>该工具仅限开发者模式使用。</p>";
-  // 或者直接跳转到插件官网
-  // window.location.href = "https://your-website.com";
 }
 
 const KANJI_PATTERN = /[\u4E00-\u9FFF]/;
@@ -255,8 +253,10 @@ async function analyzeArticle(text: string): Promise<LabRow[]> {
 }
 
 function renderTable(rows: LabRow[]) {
+  const safeTableBody = tableBody!;
+
   if (!rows.length) {
-    tableBody.innerHTML = `
+    safeTableBody.innerHTML = `
       <tr>
         <td class="weicheng-lab__empty" colspan="3">暂无分析结果</td>
       </tr>
@@ -264,7 +264,7 @@ function renderTable(rows: LabRow[]) {
     return;
   }
 
-  tableBody.innerHTML = rows.map((row) => `
+  safeTableBody.innerHTML = rows.map((row) => `
     <tr>
       <td>${escapeHtml(row.word)}</td>
       <td>${escapeHtml(row.currentReading)}</td>

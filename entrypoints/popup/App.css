@@ -96,6 +96,13 @@
   background: rgba(255, 251, 235, 0.96);
 }
 
+.weicheng-card--export {
+  border: 1px solid rgba(191, 116, 61, 0.16);
+  background:
+    radial-gradient(circle at top right, rgba(191, 116, 61, 0.14), transparent 38%),
+    rgba(255, 252, 248, 0.98);
+}
+
 .weicheng-card__header {
   margin-bottom: 12px;
 }
@@ -145,6 +152,7 @@
 
 .weicheng-select:hover,
 .weicheng-tag-input__control:hover,
+.weicheng-primary-action:hover,
 .weicheng-theme-pill:hover,
 .weicheng-current-site__action:hover,
 .weicheng-tab-switcher__tab:hover,
@@ -158,6 +166,71 @@
   outline: none;
   border-color: rgba(59, 130, 246, 0.32);
   box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.08);
+}
+
+.weicheng-primary-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  border: 0;
+  border-radius: 18px;
+  padding: 13px 16px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  color: #fffaf4;
+  cursor: pointer;
+  background: linear-gradient(135deg, #cd744a, #9d4526);
+  transition: transform 140ms ease, box-shadow 140ms ease, opacity 140ms ease;
+  box-shadow: 0 14px 28px rgba(157, 69, 38, 0.18);
+}
+
+.weicheng-secondary-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  border: 1px solid rgba(157, 69, 38, 0.14);
+  border-radius: 18px;
+  padding: 12px 16px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  color: #8d482d;
+  cursor: pointer;
+  background: rgba(255, 250, 244, 0.96);
+  transition: transform 140ms ease, box-shadow 140ms ease, border-color 140ms ease;
+}
+
+.weicheng-secondary-action:hover {
+  border-color: rgba(157, 69, 38, 0.24);
+  box-shadow: 0 10px 18px rgba(157, 69, 38, 0.08);
+}
+
+.weicheng-primary-action:disabled {
+  cursor: wait;
+  opacity: 0.78;
+}
+
+.weicheng-export-actions {
+  display: grid;
+  gap: 10px;
+}
+
+.weicheng-spin {
+  animation: weicheng-spin 1s linear infinite;
+}
+
+@keyframes weicheng-spin {
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .weicheng-preset-row {

@@ -9,7 +9,7 @@ export default defineConfig({
       matches: ["<all_urls>"]
     }],
     permissions: ['tabs', 'activeTab','storage'], // activeTab 允许你在点击插件图标时获取当前页信息
-    name: '漢字furigana',
+    name: '日语划词注音',
     version: "1.0.0",
   },
   runner:{

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Check, ChevronDown, Link2, Plus, X } from 'lucide-react';
+import { Check, ChevronDown, Download, Link2, LoaderCircle, Plus, X } from 'lucide-react';
 import { browser } from 'wxt/browser';
 import {
   DEFAULT_EXTENSION_SETTINGS,
@@ -10,6 +10,13 @@ import {
   type TooltipSettings,
   type TranslatorEngine,
 } from '../../types/settings';
+import {
+  EXPORT_DRAFTS_STORAGE_KEY,
+  EXPORT_HISTORY_STORAGE_KEY,
+  createHistoryItem,
+  createWorkspaceDraft,
+  type ExtractedPageBlock,
+} from '../../util/export-workspace';
 import './App.css';
 
 const ICON_PROPS = { size: 16, strokeWidth: 1.5 };
@@ -69,6 +76,7 @@ const TOOLTIP_PRESETS: Array<{ label: string; settings: Partial<TooltipSettings>
 
 type SiteTab = 'blacklist' | 'whitelist';
 type SaveState = 'idle' | 'saving' | 'saved';
+type ExportState = 'idle' | 'loading';
 
 function App() {
   const [settings, setSettings] = useState<TooltipSettings>(DEFAULT_SETTINGS);
@@ -78,6 +86,7 @@ function App() {
   const [tagDraft, setTagDraft] = useState('');
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [saveState, setSaveState] = useState<SaveState>('idle');
+  const [exportState, setExportState] = useState<ExportState>('idle');
   const [patchNotice, setPatchNotice] = useState('');
   const saveTimerRef = useRef<number | null>(null);
 
@@ -211,6 +220,68 @@ function App() {
     if (!currentHost) return;
     setTagDraft(currentHost);
     await commitTag(currentHost);
+  };
+
+  const openExportWorkspace = async () => {
+    setExportState('loading');
+
+    try {
+      const tabs = await browser.tabs.query({ active: true, currentWindow: true });
+      const activeTab = tabs[0];
+      if (!activeTab?.id) {
+        throw new Error('无法识别当前标签页。');
+      }
+      const response = await browser.tabs.sendMessage(activeTab.id, { type: 'extract-page-text' }) as {
+        title: string;
+        sourceUrl: string;
+        blocks: ExtractedPageBlock[];
+      } | undefined;
+      const blocks = response?.blocks?.filter((block) => block.text.trim()) ?? [];
+      if (!response || !blocks.length) {
+        throw new Error('当前页面没有提取到可导出的日文正文。');
+      }
+
+      const draft = createWorkspaceDraft({
+        title: response.title,
+        sourceUrl: response.sourceUrl,
+        blocks,
+      });
+
+      const storage = await browser.storage.local.get([EXPORT_DRAFTS_STORAGE_KEY, EXPORT_HISTORY_STORAGE_KEY]);
+      const draftMap = storage[EXPORT_DRAFTS_STORAGE_KEY] && typeof storage[EXPORT_DRAFTS_STORAGE_KEY] === 'object'
+        ? storage[EXPORT_DRAFTS_STORAGE_KEY] as Record<string, unknown>
+        : {};
+      const history = Array.isArray(storage[EXPORT_HISTORY_STORAGE_KEY]) ? storage[EXPORT_HISTORY_STORAGE_KEY] : [];
+
+      await browser.storage.local.set({
+        [EXPORT_DRAFTS_STORAGE_KEY]: {
+          ...draftMap,
+          [draft.id]: draft,
+        },
+        [EXPORT_HISTORY_STORAGE_KEY]: [createHistoryItem(draft), ...history.filter((item) => item?.id !== draft.id)].slice(0, 12),
+      });
+
+      const workspaceUrl = `${browser.runtime.getURL('/dashboard.html' as never)}?draft=${encodeURIComponent(draft.id)}`;
+      await browser.tabs.create({
+        url: workspaceUrl,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '打开导出工作台失败';
+      window.alert(message);
+    } finally {
+      setExportState('idle');
+    }
+  };
+
+  const openDashboardPage = async () => {
+    const storage = await browser.storage.local.get([EXPORT_HISTORY_STORAGE_KEY]);
+    const history = Array.isArray(storage[EXPORT_HISTORY_STORAGE_KEY]) ? storage[EXPORT_HISTORY_STORAGE_KEY] : [];
+    const latestDraftId = typeof history[0]?.id === 'string' ? history[0].id : '';
+    const workspaceUrl = latestDraftId
+      ? `${browser.runtime.getURL('/dashboard.html' as never)}?draft=${encodeURIComponent(latestDraftId)}`
+      : browser.runtime.getURL('/dashboard.html' as never);
+
+    await browser.tabs.create({ url: workspaceUrl });
   };
 
   return (
@@ -466,6 +537,26 @@ function App() {
                 </button>
               </span>
             ))}
+          </div>
+        </section>
+
+        <section className="weicheng-card weicheng-card--export">
+          <div className="weicheng-card__header">
+            <div>
+              <h2 className="weicheng-card__title">导出与管理</h2>
+              <p className="weicheng-card__desc">从这里进入后台页，继续编辑打印内容、查看收藏记录，或发起当前页导出。</p>
+            </div>
+          </div>
+
+          <div className="weicheng-export-actions">
+            <button className="weicheng-secondary-action" onClick={() => void openDashboardPage()} type="button">
+              <span>进入管理页面</span>
+            </button>
+
+            <button className="weicheng-primary-action" disabled={exportState === 'loading'} onClick={() => void openExportWorkspace()} type="button">
+              {exportState === 'loading' ? <LoaderCircle className="weicheng-icon weicheng-spin" {...ICON_PROPS} /> : <Download className="weicheng-icon" {...ICON_PROPS} />}
+              <span>{exportState === 'loading' ? '正在准备工作台...' : '导出当前页面'}</span>
+            </button>
           </div>
         </section>
       </main>

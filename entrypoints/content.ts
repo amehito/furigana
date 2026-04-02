@@ -4,6 +4,7 @@ import { createRoot } from 'react-dom/client';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { Flag, Languages, LoaderCircle, Pin, PinOff, Star, Volume2 } from 'lucide-react';
 import { furiganaService } from '../util/common';
+import type { ExtractedPageBlock } from '../util/export-workspace';
 import { browser } from 'wxt/browser';
 import {
   DEFAULT_EXTENSION_SETTINGS,
@@ -131,6 +132,21 @@ export default defineContentScript({
     applyStyles(await loadTooltipSettings());
     await loadExtensionSettings();
     primeSpeechSynthesis();
+
+    browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
+    if (message?.type !== 'extract-page-text') {
+      return; 
+    }
+
+    // 使用 sendResponse 同步回传数据
+    sendResponse({
+      title: document.title,
+      sourceUrl: window.location.href,
+      blocks: extractReadablePageBlocks(),
+    });
+
+    return true;
+    });
 
     let suppressNextSelectionRender = false;
     let isPinned = false;
@@ -303,7 +319,7 @@ export default defineContentScript({
       return `
         <div class="weicheng-card-header">
           <div class="weicheng-card-header-main">
-            <strong class="weicheng-card-title">划词日语</strong>
+            <strong class="weicheng-card-title">划词日语注音</strong>
             <span class="weicheng-card-badge">${badge}</span>
           </div>
           <button aria-label="${pinLabel}" class="word-card-btn icon-btn weicheng-pin-btn ${isPinned ? 'is-pinned' : ''}" title="${pinLabel}" type="button">
@@ -587,4 +603,104 @@ function primeSpeechSynthesis() {
   };
 
   window.speechSynthesis.addEventListener('voiceschanged', handleVoicesChanged);
+}
+
+function extractReadablePageBlocks(): ExtractedPageBlock[] {
+  const root = pickReadableRoot();
+  const elements = Array.from(root.querySelectorAll<HTMLElement>('h1, h2, h3, h4, p, li, blockquote, figcaption'));
+  const seen = new Set<string>();
+  const blocks = elements
+    .filter((element) => isReadableElement(element))
+    .map((element, index) => {
+      const text = collapseWhitespace(element.innerText || element.textContent || '');
+      if (!text || seen.has(text)) return null;
+      seen.add(text);
+
+      return {
+        id: `block-${index}`,
+        kind: mapElementToBlockKind(element.tagName.toLowerCase()),
+        text,
+      } satisfies ExtractedPageBlock;
+    })
+    .filter((item): item is ExtractedPageBlock => item !== null);
+
+  if (blocks.length) {
+    return blocks;
+  }
+
+  console.log(blocks)
+  return collapseWhitespace(root.innerText)
+    .split(/\n+/)
+    .map((text) => text.trim())
+    .filter((text) => text.length > 15 && JAPANESE_TEXT_PATTERN.test(text))
+    .slice(0, 40)
+    .map((text, index) => ({
+      id: `fallback-${index}`,
+      kind: index === 0 ? 'title' : 'paragraph',
+      text,
+    }));
+}
+
+function pickReadableRoot() {
+  const prioritySelectors = [
+    'main',
+    'article',
+    '[role="main"]',
+    '#main',
+    '#content',
+    '.main',
+    '.content',
+    '.article',
+    '.post-content',
+    '.entry-content',
+  ];
+
+  for (const selector of prioritySelectors) {
+    const matched = document.querySelector<HTMLElement>(selector);
+    if (matched && collapseWhitespace(matched.innerText).length > 80) {
+      return matched;
+    }
+  }
+
+  const candidates = Array.from(document.body.querySelectorAll<HTMLElement>('section, div, article'));
+  const scored = candidates
+    .filter((element) => isReadableElement(element))
+    .map((element) => ({
+      element,
+      score: countJapaneseChars(element.innerText) + element.querySelectorAll('p').length * 24,
+    }))
+    .sort((left, right) => right.score - left.score);
+
+  return scored[0]?.element ?? document.body;
+}
+
+function isReadableElement(element: HTMLElement) {
+  if (!element.isConnected) return false;
+  if (element.closest('header, footer, nav, aside, form, dialog, [aria-hidden="true"]')) return false;
+  if (element.closest('#my-floating-popup, #weicheng-report-root')) return false;
+
+  const style = window.getComputedStyle(element);
+  if (style.display === 'none' || style.visibility === 'hidden') return false;
+
+  const text = collapseWhitespace(element.innerText || element.textContent || '');
+  if (text.length < 8 || !JAPANESE_TEXT_PATTERN.test(text)) return false;
+
+  const rect = element.getBoundingClientRect();
+  return rect.width > 0 && rect.height > 0;
+}
+
+function mapElementToBlockKind(tagName: string): ExtractedPageBlock['kind'] {
+  if (tagName === 'h1') return 'title';
+  if (tagName === 'h2' || tagName === 'h3' || tagName === 'h4') return 'subtitle';
+  if (tagName === 'blockquote') return 'quote';
+  if (tagName === 'li') return 'list-item';
+  return 'paragraph';
+}
+
+function collapseWhitespace(value: string) {
+  return value.replace(/\s+/g, ' ').trim();
+}
+
+function countJapaneseChars(value: string) {
+  return Array.from(value).filter((char) => JAPANESE_TEXT_PATTERN.test(char)).length;
 }
