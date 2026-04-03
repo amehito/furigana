@@ -5,8 +5,116 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Default Popup Title</title>
     <meta name="manifest.type" content="browser_action" />
+    <style>
+      html,
+      body {
+        margin: 0;
+        min-width: 392px;
+        min-height: 560px;
+        background: #f6f9fc;
+      }
+
+      #popup-boot {
+        position: fixed;
+        inset: 0;
+        padding: 16px;
+        background: #f6f9fc;
+        font-family: "Hiragino Sans GB", "Noto Sans SC", system-ui, sans-serif;
+        transition: opacity 160ms ease;
+      }
+
+      .popup-boot__header,
+      .popup-boot__card {
+        border-radius: 18px;
+        background: rgba(255, 255, 255, 0.92);
+        box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05), 0 10px 30px rgba(15, 23, 42, 0.04);
+      }
+
+      .popup-boot__header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 16px;
+        margin-bottom: 14px;
+      }
+
+      .popup-boot__title,
+      .popup-boot__line {
+        border-radius: 999px;
+        background: linear-gradient(90deg, rgba(226, 232, 240, 0.86), rgba(241, 245, 249, 0.98), rgba(226, 232, 240, 0.86));
+        background-size: 220% 100%;
+        animation: popup-boot-shimmer 1.35s linear infinite;
+      }
+
+      .popup-boot__title {
+        width: 148px;
+        height: 18px;
+      }
+
+      .popup-boot__switch {
+        width: 42px;
+        height: 24px;
+        border-radius: 999px;
+        background: rgba(203, 213, 225, 0.9);
+      }
+
+      .popup-boot__card {
+        padding: 16px;
+        display: grid;
+        gap: 10px;
+        margin-bottom: 14px;
+      }
+
+      .popup-boot__line {
+        height: 12px;
+      }
+
+      .popup-boot__line.is-wide {
+        width: 88%;
+      }
+
+      .popup-boot__line.is-mid {
+        width: 72%;
+      }
+
+      .popup-boot__line.is-short {
+        width: 58%;
+      }
+
+      .popup-react-mounted #popup-boot {
+        opacity: 0;
+        pointer-events: none;
+      }
+
+      @keyframes popup-boot-shimmer {
+        from {
+          background-position: 200% 0;
+        }
+
+        to {
+          background-position: -20% 0;
+        }
+      }
+    </style>
   </head>
   <body>
+    <div id="popup-boot" aria-hidden="true">
+      <div class="popup-boot__header">
+        <div class="popup-boot__title"></div>
+        <div class="popup-boot__switch"></div>
+      </div>
+      <div class="popup-boot__card">
+        <div class="popup-boot__line is-wide"></div>
+        <div class="popup-boot__line"></div>
+        <div class="popup-boot__line is-mid"></div>
+        <div class="popup-boot__line is-short"></div>
+      </div>
+      <div class="popup-boot__card">
+        <div class="popup-boot__line is-wide"></div>
+        <div class="popup-boot__line"></div>
+        <div class="popup-boot__line is-short"></div>
+      </div>
+    </div>
     <div id="root"></div>
     <script type="module" src="./main.tsx"></script>
   </body>

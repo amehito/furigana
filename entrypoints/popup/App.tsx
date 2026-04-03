@@ -76,6 +76,7 @@ const TOOLTIP_PRESETS: Array<{ label: string; settings: Partial<TooltipSettings>
 type SiteTab = 'blacklist' | 'whitelist';
 type SaveState = 'idle' | 'saving' | 'saved';
 type ExportState = 'idle' | 'loading';
+type PanelLoadState = 'loading' | 'ready';
 
 function App() {
   const [settings, setSettings] = useState<TooltipSettings>(DEFAULT_SETTINGS);
@@ -87,34 +88,71 @@ function App() {
   const [saveState, setSaveState] = useState<SaveState>('idle');
   const [exportState, setExportState] = useState<ExportState>('idle');
   const [patchNotice, setPatchNotice] = useState('');
+  const [settingsState, setSettingsState] = useState<PanelLoadState>('loading');
+  const [siteState, setSiteState] = useState<PanelLoadState>('loading');
   const saveTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
-    const loadSettings = async () => {
-      const result = await browser.storage.local.get(['tooltipSettings', 'extensionSettings', PATCH_NOTICE_STORAGE_KEY]);
-      setSettings({ ...DEFAULT_SETTINGS, ...(result.tooltipSettings ?? {}) });
-      setExtensionSettings({ ...DEFAULT_EXTENSION_SETTINGS, ...(result.extensionSettings ?? {}) });
-      setPatchNotice(typeof result[PATCH_NOTICE_STORAGE_KEY] === 'string' ? result[PATCH_NOTICE_STORAGE_KEY] : '');
-    };
-
-    const loadCurrentHost = async () => {
-      const tabs = await browser.tabs.query({ active: true, currentWindow: true });
-      const url = tabs[0]?.url;
-
-      try {
-        setCurrentHost(url ? normalizeHost(new URL(url).hostname) : '');
-      } catch {
-        setCurrentHost('');
-      }
-    };
-
-    void loadSettings();
-    void loadCurrentHost();
+    document.documentElement.classList.add('popup-react-mounted');
 
     return () => {
       if (saveTimerRef.current) {
         window.clearTimeout(saveTimerRef.current);
       }
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadSettings = async () => {
+      try {
+        const result = await browser.storage.local.get(['tooltipSettings', 'extensionSettings', PATCH_NOTICE_STORAGE_KEY]);
+        if (cancelled) return;
+
+        setSettings({ ...DEFAULT_SETTINGS, ...(result.tooltipSettings ?? {}) });
+        setExtensionSettings({ ...DEFAULT_EXTENSION_SETTINGS, ...(result.extensionSettings ?? {}) });
+        setPatchNotice(typeof result[PATCH_NOTICE_STORAGE_KEY] === 'string' ? result[PATCH_NOTICE_STORAGE_KEY] : '');
+      } finally {
+        if (!cancelled) {
+          setSettingsState('ready');
+        }
+      }
+    };
+
+    void loadSettings();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadCurrentHost = async () => {
+      try {
+        const tabs = await browser.tabs.query({ active: true, currentWindow: true });
+        const url = tabs[0]?.url;
+
+        if (cancelled) return;
+
+        try {
+          setCurrentHost(url ? normalizeHost(new URL(url).hostname) : '');
+        } catch {
+          setCurrentHost('');
+        }
+      } finally {
+        if (!cancelled) {
+          setSiteState('ready');
+        }
+      }
+    };
+
+    void loadCurrentHost();
+
+    return () => {
+      cancelled = true;
     };
   }, []);
 
@@ -323,134 +361,139 @@ function App() {
               <p className="weicheng-card__desc">模式、模板和细节样式都集中在这里。</p>
             </div>
           </div>
-
-          <div className="weicheng-field">
-            <label className="weicheng-field__label">显示模式</label>
-            <select
-              className="weicheng-select"
-              value={extensionSettings.furiganaMode}
-              onChange={(event) => saveExtensionSettings({ furiganaMode: event.target.value as FuriganaMode })}
-            >
-              {FURIGANA_MODE_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div className="weicheng-preset-row">
-            {TOOLTIP_PRESETS.map((preset) => (
-              <button
-                key={preset.label}
-                className="weicheng-theme-pill"
-                onClick={() => saveTooltipSettings(preset.settings)}
-                type="button"
-              >
-                {preset.label}
-              </button>
-            ))}
-          </div>
-
-          <div className="weicheng-preview" style={previewStyle}>
-            <span className="weicheng-preview__text">
-              私は <ruby>日本語<rt style={previewRtStyle}>にほんご</rt></ruby> を勉強します。
-            </span>
-          </div>
-
-          <button
-            className={`weicheng-advanced-toggle ${advancedOpen ? 'is-open' : ''}`}
-            onClick={() => setAdvancedOpen((current) => !current)}
-            type="button"
-          >
-            <span>高级设置</span>
-            <ChevronDown className="weicheng-icon" {...ICON_PROPS} />
-          </button>
-
-          <div className={`weicheng-advanced-panel ${advancedOpen ? 'is-open' : ''}`}>
-            <div className="weicheng-advanced-panel__inner">
+          {settingsState === 'loading' ? (
+            <PanelSkeleton lines={6} />
+          ) : (
+            <>
               <div className="weicheng-field">
-                <label className="weicheng-field__label">显示位置</label>
+                <label className="weicheng-field__label">显示模式</label>
                 <select
                   className="weicheng-select"
-                  value={settings.position}
-                  onChange={(event) => saveTooltipSettings({ position: event.target.value as TooltipSettings['position'] })}
+                  value={extensionSettings.furiganaMode}
+                  onChange={(event) => saveExtensionSettings({ furiganaMode: event.target.value as FuriganaMode })}
                 >
-                  <option value="top">上方</option>
-                  <option value="bottom">下方</option>
-                  <option value="left">左侧</option>
-                  <option value="right">右侧</option>
+                  {FURIGANA_MODE_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
                 </select>
               </div>
 
-              <RangeField
-                label={`字体大小 (${settings.fontSize}px)`}
-                max={24}
-                min={10}
-                value={settings.fontSize}
-                onChange={(value) => saveTooltipSettings({ fontSize: value })}
-              />
-
-              <RangeField
-                label={`圆角 (${settings.borderRadius}px)`}
-                max={24}
-                min={8}
-                value={settings.borderRadius}
-                onChange={(value) => saveTooltipSettings({ borderRadius: value })}
-              />
-
-              <RangeField
-                label={`注音大小 (${settings.rubySize}em)`}
-                max={1}
-                min={0.7}
-                step={0.05}
-                value={settings.rubySize}
-                onChange={(value) => saveTooltipSettings({ rubySize: value })}
-              />
-
-              <RangeField
-                label={`注音粗细 (${settings.rubyWeight})`}
-                max={600}
-                min={300}
-                step={100}
-                value={settings.rubyWeight}
-                onChange={(value) => saveTooltipSettings({ rubyWeight: value })}
-              />
-
-              <RangeField
-                label={`音频音量 (${Math.round(extensionSettings.ttsVolume * 100)}%)`}
-                max={1}
-                min={0}
-                step={0.05}
-                value={extensionSettings.ttsVolume}
-                onChange={(value) => saveExtensionSettings({ ttsVolume: value })}
-              />
-
-              <RangeField
-                label={`朗读速度 (${extensionSettings.ttsRate.toFixed(2)}x)`}
-                max={1.5}
-                min={0.5}
-                step={0.05}
-                value={extensionSettings.ttsRate}
-                onChange={(value) => saveExtensionSettings({ ttsRate: value })}
-              />
-
-              <div className="weicheng-inline-toggle">
-                <div>
-                  <label className="weicheng-field__label">自动播放朗读</label>
-                  <p className="weicheng-inline-toggle__desc">划词后自动播放当前单词或句子的读音。</p>
-                </div>
-                <button
-                  aria-label={extensionSettings.autoPlayAudio ? '关闭自动播放' : '开启自动播放'}
-                  className={`weicheng-ios-switch ${extensionSettings.autoPlayAudio ? 'is-on' : ''}`}
-                  onClick={() => saveExtensionSettings({ autoPlayAudio: !extensionSettings.autoPlayAudio })}
-                  type="button"
-                >
-                  <span className="weicheng-ios-switch__thumb" />
-                </button>
+              <div className="weicheng-preset-row">
+                {TOOLTIP_PRESETS.map((preset) => (
+                  <button
+                    key={preset.label}
+                    className="weicheng-theme-pill"
+                    onClick={() => saveTooltipSettings(preset.settings)}
+                    type="button"
+                  >
+                    {preset.label}
+                  </button>
+                ))}
               </div>
-            </div>
-          </div>
+
+              <div className="weicheng-preview" style={previewStyle}>
+                <span className="weicheng-preview__text">
+                  私は <ruby>日本語<rt style={previewRtStyle}>にほんご</rt></ruby> を勉強します。
+                </span>
+              </div>
+
+              <button
+                className={`weicheng-advanced-toggle ${advancedOpen ? 'is-open' : ''}`}
+                onClick={() => setAdvancedOpen((current) => !current)}
+                type="button"
+              >
+                <span>高级设置</span>
+                <ChevronDown className="weicheng-icon" {...ICON_PROPS} />
+              </button>
+
+              <div className={`weicheng-advanced-panel ${advancedOpen ? 'is-open' : ''}`}>
+                <div className="weicheng-advanced-panel__inner">
+                  <div className="weicheng-field">
+                    <label className="weicheng-field__label">显示位置</label>
+                    <select
+                      className="weicheng-select"
+                      value={settings.position}
+                      onChange={(event) => saveTooltipSettings({ position: event.target.value as TooltipSettings['position'] })}
+                    >
+                      <option value="top">上方</option>
+                      <option value="bottom">下方</option>
+                      <option value="left">左侧</option>
+                      <option value="right">右侧</option>
+                    </select>
+                  </div>
+
+                  <RangeField
+                    label={`字体大小 (${settings.fontSize}px)`}
+                    max={24}
+                    min={10}
+                    value={settings.fontSize}
+                    onChange={(value) => saveTooltipSettings({ fontSize: value })}
+                  />
+
+                  <RangeField
+                    label={`圆角 (${settings.borderRadius}px)`}
+                    max={24}
+                    min={8}
+                    value={settings.borderRadius}
+                    onChange={(value) => saveTooltipSettings({ borderRadius: value })}
+                  />
+
+                  <RangeField
+                    label={`注音大小 (${settings.rubySize}em)`}
+                    max={1}
+                    min={0.7}
+                    step={0.05}
+                    value={settings.rubySize}
+                    onChange={(value) => saveTooltipSettings({ rubySize: value })}
+                  />
+
+                  <RangeField
+                    label={`注音粗细 (${settings.rubyWeight})`}
+                    max={600}
+                    min={300}
+                    step={100}
+                    value={settings.rubyWeight}
+                    onChange={(value) => saveTooltipSettings({ rubyWeight: value })}
+                  />
+
+                  <RangeField
+                    label={`音频音量 (${Math.round(extensionSettings.ttsVolume * 100)}%)`}
+                    max={1}
+                    min={0}
+                    step={0.05}
+                    value={extensionSettings.ttsVolume}
+                    onChange={(value) => saveExtensionSettings({ ttsVolume: value })}
+                  />
+
+                  <RangeField
+                    label={`朗读速度 (${extensionSettings.ttsRate.toFixed(2)}x)`}
+                    max={1.5}
+                    min={0.5}
+                    step={0.05}
+                    value={extensionSettings.ttsRate}
+                    onChange={(value) => saveExtensionSettings({ ttsRate: value })}
+                  />
+
+                  <div className="weicheng-inline-toggle">
+                    <div>
+                      <label className="weicheng-field__label">自动播放朗读</label>
+                      <p className="weicheng-inline-toggle__desc">划词后自动播放当前单词或句子的读音。</p>
+                    </div>
+                    <button
+                      aria-label={extensionSettings.autoPlayAudio ? '关闭自动播放' : '开启自动播放'}
+                      className={`weicheng-ios-switch ${extensionSettings.autoPlayAudio ? 'is-on' : ''}`}
+                      onClick={() => saveExtensionSettings({ autoPlayAudio: !extensionSettings.autoPlayAudio })}
+                      type="button"
+                    >
+                      <span className="weicheng-ios-switch__thumb" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
         </section>
 
         <section className="weicheng-card">
@@ -484,59 +527,64 @@ function App() {
               <p className="weicheng-card__desc">以标签方式管理黑白名单，并支持当前站快速切换。</p>
             </div>
           </div>
-
-          <div className="weicheng-current-site">
-            <div className="weicheng-current-site__meta">
-              <span className="weicheng-current-site__label">当前网页: {currentHost || '无法识别'}</span>
-            </div>
-            <button className="weicheng-current-site__action" disabled={!currentHost} onClick={toggleCurrentSiteBlacklist} type="button">
-              {currentSiteBlacklisted ? '恢复启用' : '在此网站禁用'}
-            </button>
-          </div>
-
-          <div className="weicheng-tab-switcher">
-            {(['blacklist', 'whitelist'] as SiteTab[]).map((tab) => (
-              <button
-                key={tab}
-                className={`weicheng-tab-switcher__tab ${activeSiteTab === tab ? 'is-active' : ''}`}
-                onClick={() => setActiveSiteTab(tab)}
-                type="button"
-              >
-                {tab === 'blacklist' ? '黑名单' : '白名单'}
-              </button>
-            ))}
-          </div>
-
-          <div className="weicheng-field">
-            <label className="weicheng-field__label">
-              {activeSiteTab === 'blacklist' ? '黑名单域名' : '白名单域名'}
-            </label>
-            <div className="weicheng-tag-input">
-              <Plus className="weicheng-icon weicheng-tag-input__icon" {...ICON_PROPS} />
-              <input
-                className="weicheng-tag-input__control"
-                placeholder="输入域名后按 Enter"
-                value={tagDraft}
-                onChange={(event) => setTagDraft(event.target.value)}
-                onKeyDown={handleTagInputKeyDown}
-              />
-            </div>
-            <button className="weicheng-helper-link" onClick={addCurrentHostToActiveTab} type="button">
-              <Link2 className="weicheng-icon" {...ICON_PROPS} />
-              <span>Add current: {currentHost || '当前页不可用'}</span>
-            </button>
-          </div>
-
-          <div className="weicheng-tag-list">
-            {currentTagList.map((host) => (
-              <span className="weicheng-tag" key={host}>
-                <span>{host}</span>
-                <button className="weicheng-tag__remove" onClick={() => removeTag(host)} type="button">
-                  <X className="weicheng-icon" {...ICON_PROPS} />
+          {siteState === 'loading' ? (
+            <PanelSkeleton lines={4} compact />
+          ) : (
+            <>
+              <div className="weicheng-current-site">
+                <div className="weicheng-current-site__meta">
+                  <span className="weicheng-current-site__label">当前网页: {currentHost || '无法识别'}</span>
+                </div>
+                <button className="weicheng-current-site__action" disabled={!currentHost} onClick={toggleCurrentSiteBlacklist} type="button">
+                  {currentSiteBlacklisted ? '恢复启用' : '在此网站禁用'}
                 </button>
-              </span>
-            ))}
-          </div>
+              </div>
+
+              <div className="weicheng-tab-switcher">
+                {(['blacklist', 'whitelist'] as SiteTab[]).map((tab) => (
+                  <button
+                    key={tab}
+                    className={`weicheng-tab-switcher__tab ${activeSiteTab === tab ? 'is-active' : ''}`}
+                    onClick={() => setActiveSiteTab(tab)}
+                    type="button"
+                  >
+                    {tab === 'blacklist' ? '黑名单' : '白名单'}
+                  </button>
+                ))}
+              </div>
+
+              <div className="weicheng-field">
+                <label className="weicheng-field__label">
+                  {activeSiteTab === 'blacklist' ? '黑名单域名' : '白名单域名'}
+                </label>
+                <div className="weicheng-tag-input">
+                  <Plus className="weicheng-icon weicheng-tag-input__icon" {...ICON_PROPS} />
+                  <input
+                    className="weicheng-tag-input__control"
+                    placeholder="输入域名后按 Enter"
+                    value={tagDraft}
+                    onChange={(event) => setTagDraft(event.target.value)}
+                    onKeyDown={handleTagInputKeyDown}
+                  />
+                </div>
+                <button className="weicheng-helper-link" onClick={addCurrentHostToActiveTab} type="button">
+                  <Link2 className="weicheng-icon" {...ICON_PROPS} />
+                  <span>Add current: {currentHost || '当前页不可用'}</span>
+                </button>
+              </div>
+
+              <div className="weicheng-tag-list">
+                {currentTagList.map((host) => (
+                  <span className="weicheng-tag" key={host}>
+                    <span>{host}</span>
+                    <button className="weicheng-tag__remove" onClick={() => removeTag(host)} type="button">
+                      <X className="weicheng-icon" {...ICON_PROPS} />
+                    </button>
+                  </span>
+                ))}
+              </div>
+            </>
+          )}
         </section>
 
         <section className="weicheng-card weicheng-card--export">
@@ -568,6 +616,19 @@ function App() {
           </>
         )}
       </div>
+    </div>
+  );
+}
+
+function PanelSkeleton({ lines, compact = false }: { lines: number; compact?: boolean }) {
+  return (
+    <div className={`weicheng-panel-skeleton ${compact ? 'is-compact' : ''}`} aria-hidden="true">
+      {Array.from({ length: lines }, (_, index) => (
+        <span
+          className={`weicheng-panel-skeleton__line ${index === 0 ? 'is-wide' : index === lines - 1 ? 'is-short' : ''}`}
+          key={index}
+        />
+      ))}
     </div>
   );
 }

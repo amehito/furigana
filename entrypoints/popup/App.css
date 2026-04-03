@@ -91,6 +91,33 @@
   box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05), 0 10px 30px rgba(15, 23, 42, 0.04);
 }
 
+.weicheng-panel-skeleton {
+  display: grid;
+  gap: 10px;
+}
+
+.weicheng-panel-skeleton.is-compact {
+  gap: 8px;
+}
+
+.weicheng-panel-skeleton__line {
+  display: block;
+  width: 100%;
+  height: 12px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, rgba(226, 232, 240, 0.86), rgba(241, 245, 249, 0.98), rgba(226, 232, 240, 0.86));
+  background-size: 220% 100%;
+  animation: weicheng-skeleton-shimmer 1.35s linear infinite;
+}
+
+.weicheng-panel-skeleton__line.is-wide {
+  width: 88%;
+}
+
+.weicheng-panel-skeleton__line.is-short {
+  width: 62%;
+}
+
 .weicheng-card--notice {
   border: 1px solid rgba(251, 191, 36, 0.18);
   background: rgba(255, 251, 235, 0.96);
@@ -230,6 +257,16 @@
 
   to {
     transform: rotate(360deg);
+  }
+}
+
+@keyframes weicheng-skeleton-shimmer {
+  from {
+    background-position: 200% 0;
+  }
+
+  to {
+    background-position: -20% 0;
   }
 }
 
