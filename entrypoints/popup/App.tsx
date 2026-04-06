@@ -82,7 +82,7 @@ function App() {
   const [settings, setSettings] = useState<TooltipSettings>(DEFAULT_SETTINGS);
   const [extensionSettings, setExtensionSettings] = useState<ExtensionSettings>(DEFAULT_EXTENSION_SETTINGS);
   const [currentHost, setCurrentHost] = useState('');
-  const [activeSiteTab, setActiveSiteTab] = useState<SiteTab>('blacklist');
+  const [activeSiteTab, setActiveSiteTab] = useState<SiteTab>(DEFAULT_EXTENSION_SETTINGS.siteAccessMode);
   const [tagDraft, setTagDraft] = useState('');
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [saveState, setSaveState] = useState<SaveState>('idle');
@@ -126,6 +126,10 @@ function App() {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    setActiveSiteTab(extensionSettings.siteAccessMode);
+  }, [extensionSettings.siteAccessMode]);
 
   useEffect(() => {
     let cancelled = false;
@@ -188,9 +192,9 @@ function App() {
     [activeSiteTab, extensionSettings.blacklist, extensionSettings.whitelist],
   );
 
-  const currentSiteBlacklisted = useMemo(
-    () => currentHost ? extensionSettings.blacklist.includes(currentHost) : false,
-    [currentHost, extensionSettings.blacklist],
+  const currentSiteInActiveList = useMemo(
+    () => currentHost ? currentTagList.includes(currentHost) : false,
+    [currentHost, currentTagList],
   );
 
   const previewStyle = useMemo(() => ({
@@ -211,14 +215,24 @@ function App() {
     await saveExtensionSettings({ globalEnabled: !extensionSettings.globalEnabled });
   };
 
-  const toggleCurrentSiteBlacklist = async () => {
+  const setSiteAccessMode = async (mode: SiteAccessMode) => {
+    setActiveSiteTab(mode);
+    await saveExtensionSettings({ siteAccessMode: mode });
+  };
+
+  const toggleCurrentSiteInActiveList = async () => {
     if (!currentHost) return;
 
-    const nextBlacklist = currentSiteBlacklisted
-      ? extensionSettings.blacklist.filter((host) => host !== currentHost)
-      : Array.from(new Set([...extensionSettings.blacklist, currentHost]));
+    const nextList = currentSiteInActiveList
+      ? currentTagList.filter((host) => host !== currentHost)
+      : Array.from(new Set([...currentTagList, currentHost]));
 
-    await saveExtensionSettings({ blacklist: nextBlacklist });
+    if (activeSiteTab === 'blacklist') {
+      await saveExtensionSettings({ blacklist: nextList });
+      return;
+    }
+
+    await saveExtensionSettings({ whitelist: nextList });
   };
 
   const commitTag = async (rawValue: string) => {
@@ -535,8 +549,10 @@ function App() {
                 <div className="weicheng-current-site__meta">
                   <span className="weicheng-current-site__label">当前网页: {currentHost || '无法识别'}</span>
                 </div>
-                <button className="weicheng-current-site__action" disabled={!currentHost} onClick={toggleCurrentSiteBlacklist} type="button">
-                  {currentSiteBlacklisted ? '恢复启用' : '在此网站禁用'}
+                <button className="weicheng-current-site__action" disabled={!currentHost} onClick={toggleCurrentSiteInActiveList} type="button">
+                  {activeSiteTab === 'blacklist'
+                    ? (currentSiteInActiveList ? '恢复启用' : '在此网站禁用')
+                    : (currentSiteInActiveList ? '移出白名单' : '加入白名单')}
                 </button>
               </div>
 
@@ -545,7 +561,7 @@ function App() {
                   <button
                     key={tab}
                     className={`weicheng-tab-switcher__tab ${activeSiteTab === tab ? 'is-active' : ''}`}
-                    onClick={() => setActiveSiteTab(tab)}
+                    onClick={() => void setSiteAccessMode(tab)}
                     type="button"
                   >
                     {tab === 'blacklist' ? '黑名单' : '白名单'}
