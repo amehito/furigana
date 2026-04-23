@@ -213,6 +213,200 @@ textarea {
   max-width: 980px;
 }
 
+.workspace-panel--site-policies {
+  max-width: 980px;
+}
+
+.workspace-panel--community {
+  max-width: 980px;
+}
+
+.community-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  margin-bottom: 18px;
+}
+
+.community-card,
+.community-qr-panel {
+  border: 1px solid rgba(81, 67, 50, 0.12);
+  border-radius: 22px;
+  padding: 18px;
+  background: #fff;
+}
+
+.community-card h3,
+.community-qr-panel h3 {
+  margin: 0 0 10px;
+  font-size: 22px;
+}
+
+.community-card p,
+.community-qr-panel p {
+  margin: 0 0 10px;
+  line-height: 1.7;
+  color: var(--workspace-subtle);
+}
+
+.community-card p:last-child,
+.community-qr-panel p:last-child {
+  margin-bottom: 0;
+}
+
+.community-qr-panel {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 220px;
+  gap: 18px;
+  align-items: center;
+}
+
+.community-qr-frame {
+  display: grid;
+  place-items: center;
+  width: 220px;
+  max-width: 100%;
+  aspect-ratio: 1;
+  border: 1px solid rgba(81, 67, 50, 0.14);
+  border-radius: 8px;
+  padding: 14px;
+  background: #fffdfa;
+}
+
+.community-qr-frame__image {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.site-policy-overview {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.site-policy-mode-switcher,
+.site-policy-tab-switcher {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.site-policy-mode-switcher {
+  margin-bottom: 18px;
+}
+
+.site-policy-mode-switcher__tab,
+.site-policy-tab-switcher__tab,
+.site-policy-field__input button,
+.site-policy-chip button {
+  border: 1px solid rgba(81, 67, 50, 0.14);
+  border-radius: 8px;
+  color: inherit;
+  cursor: pointer;
+  background: #fffdfa;
+}
+
+.site-policy-mode-switcher__tab,
+.site-policy-tab-switcher__tab {
+  padding: 10px 14px;
+}
+
+.site-policy-mode-switcher__tab.is-active,
+.site-policy-tab-switcher__tab.is-active {
+  color: var(--workspace-accent);
+  border-color: rgba(182, 91, 58, 0.28);
+  background: rgba(255, 244, 238, 0.96);
+}
+
+.site-policy-editor {
+  border: 1px solid rgba(81, 67, 50, 0.12);
+  border-radius: 22px;
+  padding: 18px;
+  background: #fff;
+}
+
+.site-policy-editor__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.site-policy-editor__count {
+  font-size: 13px;
+  color: var(--workspace-subtle);
+}
+
+.site-policy-field {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.site-policy-field span {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--workspace-subtle);
+}
+
+.site-policy-field__input {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+}
+
+.site-policy-field__input input {
+  width: 100%;
+  border: 1px solid rgba(81, 67, 50, 0.16);
+  border-radius: 8px;
+  padding: 12px 14px;
+  color: inherit;
+  background: #fffdfa;
+}
+
+.site-policy-field__input button,
+.site-policy-chip button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.site-policy-field__input button {
+  padding: 0 16px;
+}
+
+.site-policy-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.site-policy-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 100%;
+  border: 1px solid rgba(81, 67, 50, 0.14);
+  border-radius: 8px;
+  padding: 8px 10px;
+  background: #fbf7f1;
+}
+
+.site-policy-chip span {
+  word-break: break-all;
+}
+
+.site-policy-chip button {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  flex: 0 0 auto;
+}
+
 .favorites-load {
   margin-bottom: 20px;
   border: 1px solid rgba(81, 67, 50, 0.12);
@@ -877,6 +1071,21 @@ textarea {
 
   .favorite-review-dialog__body {
     grid-template-columns: 1fr;
+  }
+
+  .site-policy-overview,
+  .community-grid,
+  .site-policy-field__input {
+    grid-template-columns: 1fr;
+  }
+
+  .community-qr-panel {
+    grid-template-columns: 1fr;
+  }
+
+  .site-policy-editor__header {
+    align-items: flex-start;
+    flex-direction: column;
   }
 
   .favorite-review-keyboard__grid {

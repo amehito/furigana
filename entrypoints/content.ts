@@ -24,7 +24,7 @@ import { ErrorReportModal } from './components/ErrorReportModal';
 
 const divName = 'my-floating-popup';
 const styleId = 'furigana-dynamic-style';
-const reportModalId = 'weicheng-report-root';
+const reportModalId = 'oye-report-root';
 const MAX_TOOLTIP_CHARS = 100;
 const WORD_CARD_CHARS = 7;
 const JAPANESE_TEXT_PATTERN = /[\u3040-\u30FF\u31F0-\u31FF\u4E00-\u9FFF]/;
@@ -66,7 +66,7 @@ export default defineContentScript({
     };
     const audioIcons = {
       play: createIconMarkup(Volume2),
-      loading: createIconMarkup(LoaderCircle, 'weicheng-icon-spin'),
+      loading: createIconMarkup(LoaderCircle, 'oye-icon-spin'),
       translate: createIconMarkup(Languages),
       report: createIconMarkup(Flag),
       favorite: createIconMarkup(Star),
@@ -103,13 +103,13 @@ export default defineContentScript({
       overlay.style.color = settings.textColor;
       overlay.style.padding = '0';
       overlay.style.opacity = '1';
-      overlay.style.setProperty('--weicheng-tooltip-font', `${settings.fontSize}px`);
-      overlay.style.setProperty('--weicheng-tooltip-content-font', `${settings.fontSize + 4}px`);
-      overlay.style.setProperty('--weicheng-tooltip-bg', hexToRgba(settings.backgroundColor, settings.bgOpacity / 100));
-      overlay.style.setProperty('--weicheng-tooltip-text', settings.textColor);
-      overlay.style.setProperty('--weicheng-tooltip-radius', `${settings.borderRadius}px`);
-      overlay.style.setProperty('--weicheng-tooltip-padding', `${settings.padding}px`);
-      overlay.style.setProperty('--weicheng-tooltip-shadow', '0 10px 25px -5px rgba(0,0,0,0.1)');
+      overlay.style.setProperty('--oye-tooltip-font', `${settings.fontSize}px`);
+      overlay.style.setProperty('--oye-tooltip-content-font', `${settings.fontSize + 4}px`);
+      overlay.style.setProperty('--oye-tooltip-bg', hexToRgba(settings.backgroundColor, settings.bgOpacity / 100));
+      overlay.style.setProperty('--oye-tooltip-text', settings.textColor);
+      overlay.style.setProperty('--oye-tooltip-radius', `${settings.borderRadius}px`);
+      overlay.style.setProperty('--oye-tooltip-padding', `${settings.padding}px`);
+      overlay.style.setProperty('--oye-tooltip-shadow', '0 10px 25px -5px rgba(0,0,0,0.1)');
 
       let styleTag = document.getElementById(styleId) as HTMLStyleElement;
       if (!styleTag) {
@@ -340,12 +340,12 @@ export default defineContentScript({
       const pinLabel = isPinned ? '解除固定' : '固定卡片';
 
       return `
-        <div class="weicheng-card-header">
-          <div class="weicheng-card-header-main">
-            <strong class="weicheng-card-title">划词日语注音</strong>
-            <span class="weicheng-card-badge">${badge}</span>
+        <div class="oye-card-header">
+          <div class="oye-card-header-main">
+            <strong class="oye-card-title">划词日语注音</strong>
+            <span class="oye-card-badge">${badge}</span>
           </div>
-          <button aria-label="${pinLabel}" class="word-card-btn icon-btn weicheng-pin-btn ${isPinned ? 'is-pinned' : ''}" title="${pinLabel}" type="button">
+          <button aria-label="${pinLabel}" class="word-card-btn icon-btn oye-pin-btn ${isPinned ? 'is-pinned' : ''}" title="${pinLabel}" type="button">
             ${buildButtonContent(pinIcon, '')}
           </button>
         </div>
@@ -353,7 +353,7 @@ export default defineContentScript({
     };
 
     const updatePinButtonState = () => {
-      const button = overlay.querySelector<HTMLButtonElement>('.weicheng-pin-btn');
+      const button = overlay.querySelector<HTMLButtonElement>('.oye-pin-btn');
       if (!button) return;
 
       const label = isPinned ? '解除固定' : '固定卡片';
@@ -381,12 +381,12 @@ export default defineContentScript({
     };
 
     const attachOverlayChrome = () => {
-      overlay.querySelector<HTMLButtonElement>('.weicheng-pin-btn')?.addEventListener('click', (event) => {
+      overlay.querySelector<HTMLButtonElement>('.oye-pin-btn')?.addEventListener('click', (event) => {
         event.preventDefault();
         togglePinnedState();
       });
 
-      const header = overlay.querySelector<HTMLElement>('.weicheng-card-header');
+      const header = overlay.querySelector<HTMLElement>('.oye-card-header');
       header?.addEventListener('pointerdown', (event) => {
         const target = event.target as HTMLElement | null;
         if (!target || target.closest('button')) return;
@@ -605,9 +605,9 @@ function createIconMarkup(Icon: typeof Volume2, className = '') {
 
 function buildButtonContent(iconMarkup: string, label: string) {
   return `
-    <span class="weicheng-btn-inner">
-      <span class="weicheng-btn-icon">${iconMarkup}</span>
-      ${label ? `<span class="weicheng-btn-label">${label}</span>` : ''}
+    <span class="oye-btn-inner">
+      <span class="oye-btn-icon">${iconMarkup}</span>
+      ${label ? `<span class="oye-btn-label">${label}</span>` : ''}
     </span>
   `;
 }
@@ -617,7 +617,7 @@ function setAudioButtonState(button: HTMLButtonElement | null | undefined, loadi
 
   button.disabled = loading;
   button.innerHTML = loading
-    ? buildButtonContent(createIconMarkup(LoaderCircle, 'weicheng-icon-spin'), '')
+    ? buildButtonContent(createIconMarkup(LoaderCircle, 'oye-icon-spin'), '')
     : buildButtonContent(createIconMarkup(Volume2), '');
 }
 
@@ -705,7 +705,7 @@ function pickReadableRoot() {
 function isReadableElement(element: HTMLElement) {
   if (!element.isConnected) return false;
   if (element.closest('header, footer, nav, aside, form, dialog, [aria-hidden="true"]')) return false;
-  if (element.closest('#my-floating-popup, #weicheng-report-root')) return false;
+  if (element.closest('#my-floating-popup, #oye-report-root')) return false;
 
   const style = window.getComputedStyle(element);
   if (style.display === 'none' || style.visibility === 'hidden') return false;

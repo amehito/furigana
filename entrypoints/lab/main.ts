@@ -32,36 +32,36 @@ root.innerHTML = `
       background: linear-gradient(180deg, #f7fafc, #eef4fb);
     }
 
-    .weicheng-lab {
+    .oye-lab {
       max-width: 1200px;
       margin: 0 auto;
       padding: 32px 20px 40px;
     }
 
-    .weicheng-lab__header {
+    .oye-lab__header {
       margin-bottom: 20px;
     }
 
-    .weicheng-lab__title {
+    .oye-lab__title {
       margin: 0 0 6px;
       font-size: 28px;
       line-height: 1.2;
     }
 
-    .weicheng-lab__desc {
+    .oye-lab__desc {
       margin: 0;
       color: #64748b;
       line-height: 1.6;
     }
 
-    .weicheng-lab__panel {
+    .oye-lab__panel {
       padding: 20px;
       border-radius: 20px;
       background: rgba(255, 255, 255, 0.92);
       box-shadow: 0 10px 30px rgba(15, 23, 42, 0.06);
     }
 
-    .weicheng-lab__textarea {
+    .oye-lab__textarea {
       width: 100%;
       min-height: 260px;
       padding: 16px;
@@ -75,7 +75,7 @@ root.innerHTML = `
       background: #fff;
     }
 
-    .weicheng-lab__actions {
+    .oye-lab__actions {
       display: flex;
       flex-wrap: wrap;
       gap: 12px;
@@ -83,7 +83,7 @@ root.innerHTML = `
       margin-top: 16px;
     }
 
-    .weicheng-lab__button {
+    .oye-lab__button {
       border: 0;
       border-radius: 999px;
       padding: 10px 16px;
@@ -94,21 +94,21 @@ root.innerHTML = `
       background: linear-gradient(135deg, #2563eb, #0f766e);
     }
 
-    .weicheng-lab__button--secondary {
+    .oye-lab__button--secondary {
       background: linear-gradient(135deg, #475569, #334155);
     }
 
-    .weicheng-lab__button:disabled {
+    .oye-lab__button:disabled {
       opacity: 0.6;
       cursor: not-allowed;
     }
 
-    .weicheng-lab__status {
+    .oye-lab__status {
       color: #64748b;
       font-size: 14px;
     }
 
-    .weicheng-lab__table-wrap {
+    .oye-lab__table-wrap {
       margin-top: 20px;
       overflow: auto;
       border: 1px solid rgba(226, 232, 240, 0.9);
@@ -116,14 +116,14 @@ root.innerHTML = `
       background: #fff;
     }
 
-    .weicheng-lab__table {
+    .oye-lab__table {
       width: 100%;
       border-collapse: collapse;
       min-width: 720px;
     }
 
-    .weicheng-lab__table th,
-    .weicheng-lab__table td {
+    .oye-lab__table th,
+    .oye-lab__table td {
       padding: 12px 14px;
       border-bottom: 1px solid rgba(226, 232, 240, 0.9);
       text-align: left;
@@ -132,7 +132,7 @@ root.innerHTML = `
       line-height: 1.6;
     }
 
-    .weicheng-lab__table th {
+    .oye-lab__table th {
       position: sticky;
       top: 0;
       background: #f8fafc;
@@ -140,30 +140,30 @@ root.innerHTML = `
       font-weight: 700;
     }
 
-    .weicheng-lab__empty {
+    .oye-lab__empty {
       padding: 28px 16px;
       text-align: center;
       color: #94a3b8;
     }
   </style>
 
-  <main class="weicheng-lab">
-    <header class="weicheng-lab__header">
-      <h1 class="weicheng-lab__title">注音测试实验室</h1>
-      <p class="weicheng-lab__desc">粘贴一段日文文章，按词切分、去重、提取上下文，并导出注音校对 CSV。</p>
+  <main class="oye-lab">
+    <header class="oye-lab__header">
+      <h1 class="oye-lab__title">注音测试实验室</h1>
+      <p class="oye-lab__desc">粘贴一段日文文章，按词切分、去重、提取上下文，并导出注音校对 CSV。</p>
     </header>
 
-    <section class="weicheng-lab__panel">
-      <textarea class="weicheng-lab__textarea" placeholder="请粘贴需要分析的日文文章"></textarea>
+    <section class="oye-lab__panel">
+      <textarea class="oye-lab__textarea" placeholder="请粘贴需要分析的日文文章"></textarea>
 
-      <div class="weicheng-lab__actions">
-        <button class="weicheng-lab__button" type="button">开始分析</button>
-        <button class="weicheng-lab__button weicheng-lab__button--secondary" type="button" disabled>导出 CSV</button>
-        <span class="weicheng-lab__status">等待输入文章</span>
+      <div class="oye-lab__actions">
+        <button class="oye-lab__button" type="button">开始分析</button>
+        <button class="oye-lab__button oye-lab__button--secondary" type="button" disabled>导出 CSV</button>
+        <span class="oye-lab__status">等待输入文章</span>
       </div>
 
-      <div class="weicheng-lab__table-wrap">
-        <table class="weicheng-lab__table">
+      <div class="oye-lab__table-wrap">
+        <table class="oye-lab__table">
           <thead>
             <tr>
               <th>原文</th>
@@ -173,7 +173,7 @@ root.innerHTML = `
           </thead>
           <tbody>
             <tr>
-              <td class="weicheng-lab__empty" colspan="3">暂无分析结果</td>
+              <td class="oye-lab__empty" colspan="3">暂无分析结果</td>
             </tr>
           </tbody>
         </table>
@@ -182,10 +182,10 @@ root.innerHTML = `
   </main>
 `;
 
-const textarea = root.querySelector<HTMLTextAreaElement>('.weicheng-lab__textarea');
-const analyzeButton = root.querySelector<HTMLButtonElement>('.weicheng-lab__button');
-const exportButton = root.querySelectorAll<HTMLButtonElement>('.weicheng-lab__button')[1];
-const status = root.querySelector<HTMLSpanElement>('.weicheng-lab__status');
+const textarea = root.querySelector<HTMLTextAreaElement>('.oye-lab__textarea');
+const analyzeButton = root.querySelector<HTMLButtonElement>('.oye-lab__button');
+const exportButton = root.querySelectorAll<HTMLButtonElement>('.oye-lab__button')[1];
+const status = root.querySelector<HTMLSpanElement>('.oye-lab__status');
 const tableBody = root.querySelector<HTMLTableSectionElement>('tbody');
 
 if (!textarea || !analyzeButton || !exportButton || !status || !tableBody) {
@@ -258,7 +258,7 @@ function renderTable(rows: LabRow[]) {
   if (!rows.length) {
     safeTableBody.innerHTML = `
       <tr>
-        <td class="weicheng-lab__empty" colspan="3">暂无分析结果</td>
+        <td class="oye-lab__empty" colspan="3">暂无分析结果</td>
       </tr>
     `;
     return;

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 
 const REPORT_FORM_ID = '1FAIpQLSdjKa6b2yIqzpRo3ZZzEXA0QL6LAzy-UTE9Z9vtM6KwGPNKVA';
 const REPORT_ENDPOINT = `https://docs.google.com/forms/d/e/${REPORT_FORM_ID}/formResponse`;
-const REPORT_STORAGE_KEY = 'https://word.cloud.microsoft/en-us/';
+const REPORT_STORAGE_KEY ='furigana_reported_words';
 const KANJI_PATTERN = /[\u4E00-\u9FFF]/;
 const REPORT_OPTIONS = [
   { label: '注音错误', value: 'UNCORRECT_FURIGANA' },
@@ -94,42 +94,42 @@ export function ErrorReportModal({
   };
 
   return (
-    <div className="weicheng-report-backdrop" role="presentation" onClick={onClose}>
+    <div className="oye-report-backdrop" role="presentation" onClick={onClose}>
       <section
         aria-modal="true"
-        className="weicheng-report-modal"
+        className="oye-report-modal"
         onClick={(event) => event.stopPropagation()}
         role="dialog"
       >
-        <div className="weicheng-report-header">
+        <div className="oye-report-header">
           <div>
-            <p className="weicheng-report-eyebrow">错误反馈</p>
-            <h3 className="weicheng-report-title">
+            <p className="oye-report-eyebrow">错误反馈</p>
+            <h3 className="oye-report-title">
               {word}
-              {showTitleReading ? <span className="weicheng-report-title-reading">（{plainFurigana}）</span> : null}
+              {showTitleReading ? <span className="oye-report-title-reading">（{plainFurigana}）</span> : null}
             </h3>
           </div>
-          <button className="weicheng-report-close" onClick={onClose} type="button">
+          <button className="oye-report-close" onClick={onClose} type="button">
             ×
           </button>
         </div>
 
-        <div className="weicheng-report-meta">
+        <div className="oye-report-meta">
           <p><strong>当前注音：</strong>{plainFurigana || currentFurigana}</p>
           <p><strong>上下文：</strong>{reportContext}</p>
         </div>
 
         {hasReported ? (
-          <div className="weicheng-report-success">✅ 您已上报成功</div>
+          <div className="oye-report-success">✅ 您已上报成功</div>
         ) : (
-          <form className="weicheng-report-form" onSubmit={handleSubmit}>
-            <div className="weicheng-report-field">
-              <label className="weicheng-report-label" htmlFor="weicheng-report-type">
+          <form className="oye-report-form" onSubmit={handleSubmit}>
+            <div className="oye-report-field">
+              <label className="oye-report-label" htmlFor="oye-report-type">
                 问题类型
               </label>
               <select
-                className="weicheng-report-input"
-                id="weicheng-report-type"
+                className="oye-report-input"
+                id="oye-report-type"
                 onChange={(event) => setSelectedType(event.target.value as ReportType)}
                 value={selectedType}
               >
@@ -142,13 +142,13 @@ export function ErrorReportModal({
             </div>
 
             {shouldShowSuggestion ? (
-              <div className="weicheng-report-field">
-                <label className="weicheng-report-label" htmlFor="weicheng-suggested-reading">
+              <div className="oye-report-field">
+                <label className="oye-report-label" htmlFor="oye-suggested-reading">
                   建议读音
                 </label>
                 <input
-                  className="weicheng-report-input"
-                  id="weicheng-suggested-reading"
+                  className="oye-report-input"
+                  id="oye-suggested-reading"
                   onChange={(event) => setSuggestedReading(event.target.value)}
                   placeholder="请输入建议读音"
                   value={suggestedReading}
@@ -156,26 +156,26 @@ export function ErrorReportModal({
               </div>
             ) : null}
 
-            <div className="weicheng-report-field">
-              <label className="weicheng-report-label" htmlFor="weicheng-report-remark">
+            <div className="oye-report-field">
+              <label className="oye-report-label" htmlFor="oye-report-remark">
                 备注
               </label>
               <input
-                className="weicheng-report-input"
-                id="weicheng-report-remark"
+                className="oye-report-input"
+                id="oye-report-remark"
                 onChange={(event) => setRemark(event.target.value)}
                 placeholder="可补充错误原因、建议或特殊上下文"
                 value={remark}
               />
             </div>
 
-            {message ? <div className="weicheng-report-message">{message}</div> : null}
+            {message ? <div className="oye-report-message">{message}</div> : null}
 
-            <div className="weicheng-report-actions">
-              <button className="weicheng-report-secondary" onClick={onClose} type="button">
+            <div className="oye-report-actions">
+              <button className="oye-report-secondary" onClick={onClose} type="button">
                 取消
               </button>
-              <button className="weicheng-report-submit" disabled={isSubmitting} type="submit">
+              <button className="oye-report-submit" disabled={isSubmitting} type="submit">
                 {isSubmitting ? '正在提交...' : '提交反馈'}
               </button>
             </div>

@@ -12,12 +12,13 @@ import {
   Printer,
   RefreshCw,
   Trash2,
+  Users,
   Volume2,
   X,
 } from 'lucide-react';
 import { browser } from 'wxt/browser';
 import { furiganaService } from '../../util/common';
-import { DEFAULT_EXTENSION_SETTINGS, type ExtensionSettings, type TranslatorEngine } from '../../types/settings';
+import { DEFAULT_EXTENSION_SETTINGS, type ExtensionSettings, type SiteAccessMode, type TranslatorEngine } from '../../types/settings';
 import {
   EXPORT_DRAFTS_STORAGE_KEY,
   EXPORT_HISTORY_STORAGE_KEY,
@@ -38,7 +39,8 @@ import {
 } from '../../util/favorites';
 
 const ICON_PROPS = { size: 24, strokeWidth: 1.75 };
-type MenuKey = 'print' | 'favorites';
+const SHOW_COMMUNITY_SECTION = false;
+type MenuKey = 'print' | 'favorites' | 'site-policies' | 'community';
 const FULL_LOAD_MESSAGE = '警告：认知负荷已达上限！不消灭这些“死角”，新知识将无法进入。';
 
 const TRANSLATOR_URL_BUILDERS: Record<TranslatorEngine, (text: string) => string> = {
@@ -59,11 +61,13 @@ function App() {
   const [draft, setDraft] = useState<ExportWorkspaceDraft | null>(null);
   const [favorites, setFavorites] = useState<FavoriteItem[]>([]);
   const [history, setHistory] = useState<ExportHistoryItem[]>([]);
-  const [activeMenu, setActiveMenu] = useState<MenuKey>('print');
+  const [activeMenu, setActiveMenu] = useState<MenuKey>(() => getInitialMenu());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [showBackToTop, setShowBackToTop] = useState(false);
   const [extensionSettings, setExtensionSettings] = useState<ExtensionSettings>(DEFAULT_EXTENSION_SETTINGS);
+  const [activeSiteTab, setActiveSiteTab] = useState<SiteAccessMode>(DEFAULT_EXTENSION_SETTINGS.siteAccessMode);
+  const [tagDraft, setTagDraft] = useState('');
   const [removingFavoriteIds, setRemovingFavoriteIds] = useState<string[]>([]);
   const [expandedFurigana, setExpandedFurigana] = useState<Record<string, boolean>>({});
   const [favoriteRubyMap, setFavoriteRubyMap] = useState<Record<string, string>>({});
@@ -92,7 +96,9 @@ function App() {
       setDraft(nextDraft);
       setFavorites(nextFavorites);
       setHistory(nextHistory);
-      setExtensionSettings({ ...DEFAULT_EXTENSION_SETTINGS, ...(storage.extensionSettings ?? {}) });
+      const nextExtensionSettings = { ...DEFAULT_EXTENSION_SETTINGS, ...(storage.extensionSettings ?? {}) };
+      setExtensionSettings(nextExtensionSettings);
+      setActiveSiteTab(nextExtensionSettings.siteAccessMode);
       setError(nextDraft ? '' : '没有找到可编辑的导出草稿，请先从 popup 发起“导出当前页面”。');
       setLoading(false);
     };
@@ -109,7 +115,8 @@ function App() {
       }
 
       if (changes.extensionSettings) {
-        setExtensionSettings({ ...DEFAULT_EXTENSION_SETTINGS, ...(changes.extensionSettings.newValue ?? {}) });
+        const nextExtensionSettings = { ...DEFAULT_EXTENSION_SETTINGS, ...(changes.extensionSettings.newValue ?? {}) };
+        setExtensionSettings(nextExtensionSettings);
       }
     };
 
@@ -169,6 +176,54 @@ function App() {
   const favoriteCount = favorites.length;
   const loadPercent = Math.min(100, (favoriteCount / FAVORITES_LIMIT) * 100);
   const inboxFull = favoriteCount >= FAVORITES_LIMIT;
+  const communityQrImage = browser.runtime.getURL('/icon/128.png' as never);
+  const currentTagList = useMemo(
+    () => activeSiteTab === 'blacklist' ? extensionSettings.blacklist : extensionSettings.whitelist,
+    [activeSiteTab, extensionSettings.blacklist, extensionSettings.whitelist],
+  );
+
+  const saveExtensionSettings = async (patch: Partial<ExtensionSettings>) => {
+    const nextSettings = { ...extensionSettings, ...patch };
+    setExtensionSettings(nextSettings);
+    await browser.storage.local.set({ extensionSettings: nextSettings });
+  };
+
+  const setSiteAccessMode = async (mode: SiteAccessMode) => {
+    setActiveSiteTab(mode);
+    await saveExtensionSettings({ siteAccessMode: mode });
+  };
+
+  const commitTag = async (rawValue: string) => {
+    const normalized = normalizeHost(rawValue);
+    if (!normalized) return;
+
+    const nextList = Array.from(new Set([...currentTagList, normalized]));
+    setTagDraft('');
+
+    if (activeSiteTab === 'blacklist') {
+      await saveExtensionSettings({ blacklist: nextList });
+      return;
+    }
+
+    await saveExtensionSettings({ whitelist: nextList });
+  };
+
+  const removeTag = async (host: string) => {
+    const nextList = currentTagList.filter((item) => item !== host);
+
+    if (activeSiteTab === 'blacklist') {
+      await saveExtensionSettings({ blacklist: nextList });
+      return;
+    }
+
+    await saveExtensionSettings({ whitelist: nextList });
+  };
+
+  const handleTagInputKeyDown = async (event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (event.key !== 'Enter') return;
+    event.preventDefault();
+    await commitTag(tagDraft);
+  };
 
   const openFavoriteReview = async (item: FavoriteItem) => {
     const rubyHtml = favoriteRubyMap[item.id] ?? item.furigana ?? await furiganaService.convert(item.text);
@@ -272,6 +327,135 @@ function App() {
           ) : (
             <div className="workspace-empty">空山基：你的大脑目前一身轻松，去摄入新内容吧。</div>
           )}
+        </section>
+      );
+    }
+
+    if (activeMenu === 'site-policies') {
+      return (
+        <section className="workspace-panel workspace-panel--site-policies">
+          <div className="workspace-panel__header">
+            <div>
+              <p className="workspace-kicker">站点策略</p>
+              <h2>黑白名单管理</h2>
+              <p className="workspace-meta">popup 只保留当前站点的快捷切换，完整历史和维护操作都集中在这里。</p>
+            </div>
+          </div>
+
+          <div className="site-policy-overview">
+            <article className="workspace-stat">
+              <span>当前策略</span>
+              <strong>{extensionSettings.siteAccessMode === 'blacklist' ? '黑名单模式' : '白名单模式'}</strong>
+            </article>
+            <article className="workspace-stat">
+              <span>黑名单</span>
+              <strong>{extensionSettings.blacklist.length}</strong>
+            </article>
+            <article className="workspace-stat">
+              <span>白名单</span>
+              <strong>{extensionSettings.whitelist.length}</strong>
+            </article>
+          </div>
+
+          <div className="site-policy-mode-switcher">
+            {(['blacklist', 'whitelist'] as SiteAccessMode[]).map((mode) => (
+              <button
+                key={mode}
+                className={`site-policy-mode-switcher__tab ${extensionSettings.siteAccessMode === mode ? 'is-active' : ''}`}
+                onClick={() => void setSiteAccessMode(mode)}
+                type="button"
+              >
+                {mode === 'blacklist' ? '当前使用黑名单模式' : '当前使用白名单模式'}
+              </button>
+            ))}
+          </div>
+
+          <div className="site-policy-editor">
+            <div className="site-policy-editor__header">
+              <div className="site-policy-tab-switcher">
+                {(['blacklist', 'whitelist'] as SiteAccessMode[]).map((tab) => (
+                  <button
+                    key={tab}
+                    className={`site-policy-tab-switcher__tab ${activeSiteTab === tab ? 'is-active' : ''}`}
+                    onClick={() => setActiveSiteTab(tab)}
+                    type="button"
+                  >
+                    {tab === 'blacklist' ? '编辑黑名单' : '编辑白名单'}
+                  </button>
+                ))}
+              </div>
+              <span className="site-policy-editor__count">
+                共 {currentTagList.length} 项
+              </span>
+            </div>
+
+            <label className="site-policy-field">
+              <span>{activeSiteTab === 'blacklist' ? '添加黑名单域名' : '添加白名单域名'}</span>
+              <div className="site-policy-field__input">
+                <input
+                  placeholder="输入域名后按 Enter"
+                  value={tagDraft}
+                  onChange={(event) => setTagDraft(event.target.value)}
+                  onKeyDown={handleTagInputKeyDown}
+                />
+                <button onClick={() => void commitTag(tagDraft)} type="button">添加</button>
+              </div>
+            </label>
+
+            <div className="site-policy-list">
+              {currentTagList.length ? currentTagList.map((host) => (
+                <span className="site-policy-chip" key={host}>
+                  <span>{host}</span>
+                  <button aria-label={`移除 ${host}`} onClick={() => void removeTag(host)} type="button">
+                    <X size={16} strokeWidth={1.8} />
+                  </button>
+                </span>
+              )) : (
+                <div className="workspace-empty workspace-empty--compact">
+                  {activeSiteTab === 'blacklist' ? '黑名单还是空的。' : '白名单还是空的。'}
+                </div>
+              )}
+            </div>
+          </div>
+        </section>
+      );
+    }
+
+    if (activeMenu === 'community') {
+      return (
+        <section className="workspace-panel workspace-panel--community">
+          <div className="workspace-panel__header">
+            <div>
+              <p className="workspace-kicker">加入群组</p>
+              <h2>交流与反馈</h2>
+              <p className="workspace-meta">问题反馈、使用交流、功能建议，都可以在群里一起聊。</p>
+            </div>
+          </div>
+
+          <div className="community-grid">
+            <section className="community-card">
+              <h3>QQ群</h3>
+              <p>群号：123456789</p>
+              <p>适合日常答疑、版本更新通知、使用问题反馈。</p>
+            </section>
+
+            <section className="community-card">
+              <h3>微信群</h3>
+              <p>扫码添加</p>
+              <p>适合集中讨论需求、收集体验反馈、同步新功能。</p>
+            </section>
+          </div>
+
+          <section className="community-qr-panel">
+            <div className="community-qr-panel__copy">
+              <p className="workspace-kicker">群二维码</p>
+              <h3>临时占位图</h3>
+              <p className="workspace-meta">这里先放一张替代图片，后面换成真实 QQ 群或微信群二维码就行。</p>
+            </div>
+            <div className="community-qr-frame">
+              <img alt="群二维码占位图" className="community-qr-frame__image" src={communityQrImage} />
+            </div>
+          </section>
         </section>
       );
     }
@@ -493,6 +677,24 @@ function App() {
             <BookMarked {...ICON_PROPS} />
             <span>收藏记录</span>
           </button>
+          <button
+            className={`workspace-nav__item ${activeMenu === 'site-policies' ? 'is-active' : ''}`}
+            onClick={() => setActiveMenu('site-policies')}
+            type="button"
+          >
+            <Languages {...ICON_PROPS} />
+            <span>站点策略</span>
+          </button>
+          {SHOW_COMMUNITY_SECTION ? (
+            <button
+              className={`workspace-nav__item ${activeMenu === 'community' ? 'is-active' : ''}`}
+              onClick={() => setActiveMenu('community')}
+              type="button"
+            >
+              <Users {...ICON_PROPS} />
+              <span>加入群组</span>
+            </button>
+          ) : null}
         </nav>
       </aside>
 
@@ -526,6 +728,18 @@ function App() {
       </button>
     </div>
   );
+}
+
+function getInitialMenu(): MenuKey {
+  const section = new URLSearchParams(window.location.search).get('section');
+  if (section === 'site-policies') {
+    return 'site-policies';
+  }
+  if (SHOW_COMMUNITY_SECTION && section === 'community') {
+    return 'community';
+  }
+
+  return 'print';
 }
 
 function BlockPreview({ block, printable = false }: { block: ExportDraftBlock; printable?: boolean }) {
@@ -666,6 +880,10 @@ function formatDateTime(value: string) {
     dateStyle: 'medium',
     timeStyle: 'short',
   }).format(new Date(value));
+}
+
+function normalizeHost(host: string) {
+  return host.trim().toLowerCase().replace(/^https?:\/\//, '').replace(/^www\./, '').replace(/\/.*$/, '');
 }
 
 function FavoriteInboxCard({

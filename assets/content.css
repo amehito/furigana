@@ -1,7 +1,7 @@
 #my-floating-popup {
   position: absolute;
   z-index: 999999;
-  color: var(--weicheng-tooltip-text, #2c3e50);
+  color: var(--oye-tooltip-text, #2c3e50);
   padding: 0;
   font-size: 14px;
   font-family: "Inter", "Hiragino Sans", "Yu Gothic", sans-serif;
@@ -18,7 +18,7 @@
 #my-floating-popup .content {
   white-space: normal;
   line-height: 1.92;
-  font-size: var(--weicheng-tooltip-content-font, 18px);
+  font-size: var(--oye-tooltip-content-font, 18px);
 }
 
 #my-floating-popup .tooltip-panel {
@@ -27,18 +27,18 @@
   position: relative;
   white-space: normal;
   padding: 18px 18px 14px;
-  border-radius: var(--weicheng-tooltip-radius, 10px);
-  color: var(--weicheng-tooltip-text, #2c3e50);
-  background: var(--weicheng-tooltip-bg, rgba(249, 250, 251, 0.94));
+  border-radius: var(--oye-tooltip-radius, 10px);
+  color: var(--oye-tooltip-text, #2c3e50);
+  background: var(--oye-tooltip-bg, rgba(249, 250, 251, 0.94));
   border: 0;
-  box-shadow: var(--weicheng-tooltip-shadow, 0 10px 25px -5px rgba(0, 0, 0, 0.1));
+  box-shadow: var(--oye-tooltip-shadow, 0 10px 25px -5px rgba(0, 0, 0, 0.1));
   backdrop-filter: blur(10px);
-  animation: weicheng-tooltip-in 180ms ease-out;
+  animation: oye-tooltip-in 180ms ease-out;
 }
 
 #my-floating-popup .tooltip-body {
   line-height: 1.96;
-  font-size: var(--weicheng-tooltip-content-font, 18px);
+  font-size: var(--oye-tooltip-content-font, 18px);
   letter-spacing: 0.01em;
 }
 
@@ -47,17 +47,17 @@
   max-width: 336px;
   position: relative;
   padding: 18px 18px 14px;
-  border-radius: var(--weicheng-tooltip-radius, 10px);
-  background: var(--weicheng-tooltip-bg, rgba(249, 250, 251, 0.94));
-  color: var(--weicheng-tooltip-text, #2c3e50);
+  border-radius: var(--oye-tooltip-radius, 10px);
+  background: var(--oye-tooltip-bg, rgba(249, 250, 251, 0.94));
+  color: var(--oye-tooltip-text, #2c3e50);
   border: 0;
-  box-shadow: var(--weicheng-tooltip-shadow, 0 10px 25px -5px rgba(0, 0, 0, 0.1));
+  box-shadow: var(--oye-tooltip-shadow, 0 10px 25px -5px rgba(0, 0, 0, 0.1));
   white-space: normal;
   backdrop-filter: blur(10px);
-  animation: weicheng-tooltip-in 180ms ease-out;
+  animation: oye-tooltip-in 180ms ease-out;
 }
 
-#my-floating-popup .weicheng-card-header {
+#my-floating-popup .oye-card-header {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
@@ -68,17 +68,17 @@
   cursor: grab;
 }
 
-#my-floating-popup .weicheng-card-header:active {
+#my-floating-popup .oye-card-header:active {
   cursor: grabbing;
 }
 
-#my-floating-popup .weicheng-card-header-main {
+#my-floating-popup .oye-card-header-main {
   min-width: 0;
   display: grid;
   gap: 8px;
 }
 
-#my-floating-popup .weicheng-card-title {
+#my-floating-popup .oye-card-title {
   font-size: 15px;
   font-weight: 700;
   line-height: 1.25;
@@ -87,7 +87,7 @@
   word-break: break-word;
 }
 
-#my-floating-popup .weicheng-card-badge {
+#my-floating-popup .oye-card-badge {
   width: fit-content;
   padding: 3px 9px;
   border-radius: 999px;
@@ -98,7 +98,7 @@
 }
 
 #my-floating-popup .card-furigana {
-  font-size: var(--weicheng-tooltip-content-font, 18px);
+  font-size: var(--oye-tooltip-content-font, 18px);
   line-height: 1.95;
   flex: 1;
   color: rgba(44, 62, 80, 0.9);
@@ -120,11 +120,16 @@
   border: 0;
   border-radius: 999px;
   padding: 0;
-  font: inherit;  
-  font-size: var(--weicheng-tooltip-font, 14px);
+  font: inherit;
+  font-size: var(--oye-tooltip-font, 14px);
   color: #64748b;
   cursor: pointer;
-  transition: transform 140ms ease, opacity 140ms ease, background-color 140ms ease, color 140ms ease, box-shadow 140ms ease;
+  transition:
+    transform 140ms ease,
+    opacity 140ms ease,
+    background-color 140ms ease,
+    color 140ms ease,
+    box-shadow 140ms ease;
 }
 
 #my-floating-popup .word-card-btn:disabled {
@@ -132,20 +137,20 @@
   opacity: 0.72;
 }
 
-#my-floating-popup .weicheng-btn-inner {
+#my-floating-popup .oye-btn-inner {
   display: inline-flex;
   align-items: center;
   justify-content: center;
 }
 
-#my-floating-popup .weicheng-btn-icon {
+#my-floating-popup .oye-btn-icon {
   display: inline-flex;
   align-items: center;
   justify-content: center;
 }
 
-.weicheng-icon-spin {
-  animation: weicheng-icon-spin 900ms linear infinite;
+.oye-icon-spin {
+  animation: oye-icon-spin 900ms linear infinite;
 }
 
 #my-floating-popup .icon-btn {
@@ -161,7 +166,9 @@
   transform: translateY(-1px);
   color: #334155;
   background: rgba(255, 255, 255, 0.92);
-  box-shadow: inset 0 0 0 1px rgba(100, 116, 139, 0.16), 0 6px 12px rgba(15, 23, 42, 0.08);
+  box-shadow:
+    inset 0 0 0 1px rgba(100, 116, 139, 0.16),
+    0 6px 12px rgba(15, 23, 42, 0.08);
 }
 
 #my-floating-popup .word-card-btn:active {
@@ -194,11 +201,11 @@
   color: #6b8f7d;
 }
 
-#my-floating-popup .weicheng-pin-btn {
+#my-floating-popup .oye-pin-btn {
   flex-shrink: 0;
 }
 
-#my-floating-popup .weicheng-pin-btn.is-pinned {
+#my-floating-popup .oye-pin-btn.is-pinned {
   color: #2563eb;
   background: rgba(219, 234, 254, 0.92);
   box-shadow: inset 0 0 0 1px rgba(37, 99, 235, 0.18);
@@ -228,7 +235,7 @@
   margin-left: 0.04em;
 }
 
-.weicheng-report-backdrop {
+.oye-report-backdrop {
   position: fixed;
   inset: 0;
   z-index: 2147483647;
@@ -240,20 +247,23 @@
   backdrop-filter: blur(6px);
 }
 
-.weicheng-report-modal {
+.oye-report-modal {
   width: min(100%, 520px);
   max-height: min(90vh, 760px);
   overflow: auto;
   border-radius: 20px;
   padding: 20px;
   color: #e5eef9;
-  background:
-    linear-gradient(180deg, rgba(27, 36, 54, 0.96), rgba(15, 20, 31, 0.98));
+  background: linear-gradient(
+    180deg,
+    rgba(27, 36, 54, 0.96),
+    rgba(15, 20, 31, 0.98)
+  );
   border: 1px solid rgba(148, 163, 184, 0.2);
   box-shadow: 0 28px 80px rgba(0, 0, 0, 0.35);
 }
 
-.weicheng-report-header {
+.oye-report-header {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
@@ -261,7 +271,7 @@
   margin-bottom: 16px;
 }
 
-.weicheng-report-eyebrow {
+.oye-report-eyebrow {
   margin: 0 0 6px;
   font-size: 12px;
   letter-spacing: 0.08em;
@@ -269,20 +279,20 @@
   color: #93c5fd;
 }
 
-.weicheng-report-title {
+.oye-report-title {
   margin: 0;
   font-size: 24px;
   line-height: 1.2;
 }
 
-.weicheng-report-title-reading {
+.oye-report-title-reading {
   margin-left: 6px;
   font-size: 16px;
   font-weight: 500;
   color: #94a3b8;
 }
 
-.weicheng-report-close {
+.oye-report-close {
   border: 0;
   border-radius: 999px;
   width: 36px;
@@ -294,7 +304,7 @@
   background: rgba(148, 163, 184, 0.16);
 }
 
-.weicheng-report-meta {
+.oye-report-meta {
   margin-bottom: 18px;
   padding: 14px;
   border-radius: 14px;
@@ -302,27 +312,27 @@
   border: 1px solid rgba(148, 163, 184, 0.14);
 }
 
-.weicheng-report-meta p {
+.oye-report-meta p {
   margin: 0 0 8px;
   line-height: 1.5;
   word-break: break-word;
 }
 
-.weicheng-report-meta p:last-child {
+.oye-report-meta p:last-child {
   margin-bottom: 0;
 }
 
-.weicheng-report-form {
+.oye-report-form {
   display: grid;
   gap: 16px;
 }
 
-.weicheng-report-options {
+.oye-report-options {
   display: grid;
   gap: 10px;
 }
 
-.weicheng-report-option {
+.oye-report-option {
   display: flex;
   align-items: center;
   gap: 10px;
@@ -332,21 +342,21 @@
   border: 1px solid rgba(148, 163, 184, 0.12);
 }
 
-.weicheng-report-option input {
+.oye-report-option input {
   accent-color: #60a5fa;
 }
 
-.weicheng-report-field {
+.oye-report-field {
   display: grid;
   gap: 8px;
 }
 
-.weicheng-report-label {
+.oye-report-label {
   font-size: 13px;
   color: #cbd5e1;
 }
 
-.weicheng-report-input {
+.oye-report-input {
   width: 100%;
   border: 1px solid rgba(148, 163, 184, 0.18);
   border-radius: 12px;
@@ -356,13 +366,13 @@
   background: rgba(15, 23, 42, 0.68);
 }
 
-.weicheng-report-input:focus {
+.oye-report-input:focus {
   outline: 2px solid rgba(96, 165, 250, 0.35);
   outline-offset: 2px;
 }
 
-.weicheng-report-message,
-.weicheng-report-success {
+.oye-report-message,
+.oye-report-success {
   border-radius: 12px;
   padding: 10px 12px;
   line-height: 1.5;
@@ -370,48 +380,51 @@
   border: 1px solid rgba(148, 163, 184, 0.14);
 }
 
-.weicheng-report-success {
+.oye-report-success {
   color: #bbf7d0;
 }
 
-.weicheng-report-actions {
+.oye-report-actions {
   display: flex;
   justify-content: flex-end;
   gap: 10px;
 }
 
-.weicheng-report-secondary,
-.weicheng-report-submit {
+.oye-report-secondary,
+.oye-report-submit {
   border: 0;
   border-radius: 12px;
   padding: 10px 14px;
   font: inherit;
   cursor: pointer;
-  transition: opacity 120ms ease, transform 120ms ease, background-color 120ms ease;
+  transition:
+    opacity 120ms ease,
+    transform 120ms ease,
+    background-color 120ms ease;
 }
 
-.weicheng-report-secondary {
+.oye-report-secondary {
   color: #e2e8f0;
   background: rgba(148, 163, 184, 0.15);
 }
 
-.weicheng-report-submit {
+.oye-report-submit {
   color: #eff6ff;
   background: linear-gradient(135deg, #2563eb, #0f766e);
 }
 
-.weicheng-report-secondary:hover,
-.weicheng-report-submit:hover {
+.oye-report-secondary:hover,
+.oye-report-submit:hover {
   transform: translateY(-1px);
 }
 
-.weicheng-report-submit:disabled {
+.oye-report-submit:disabled {
   cursor: not-allowed;
   opacity: 0.68;
   transform: none;
 }
 
-@keyframes weicheng-tooltip-in {
+@keyframes oye-tooltip-in {
   from {
     opacity: 0;
     transform: scale(0.95);
@@ -422,7 +435,7 @@
   }
 }
 
-@keyframes weicheng-icon-spin {
+@keyframes oye-icon-spin {
   from {
     transform: rotate(0deg);
   }

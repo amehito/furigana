@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Check, ChevronDown, Download, Link2, LoaderCircle, Plus, X } from 'lucide-react';
+import { Check, ChevronDown, Download, Link2, LoaderCircle } from 'lucide-react';
 import { browser } from 'wxt/browser';
 import {
   DEFAULT_EXTENSION_SETTINGS,
@@ -83,7 +83,6 @@ function App() {
   const [extensionSettings, setExtensionSettings] = useState<ExtensionSettings>(DEFAULT_EXTENSION_SETTINGS);
   const [currentHost, setCurrentHost] = useState('');
   const [activeSiteTab, setActiveSiteTab] = useState<SiteTab>(DEFAULT_EXTENSION_SETTINGS.siteAccessMode);
-  const [tagDraft, setTagDraft] = useState('');
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [saveState, setSaveState] = useState<SaveState>('idle');
   const [exportState, setExportState] = useState<ExportState>('idle');
@@ -235,44 +234,6 @@ function App() {
     await saveExtensionSettings({ whitelist: nextList });
   };
 
-  const commitTag = async (rawValue: string) => {
-    const normalized = normalizeHost(rawValue);
-    if (!normalized) return;
-
-    const nextList = Array.from(new Set([...currentTagList, normalized]));
-    setTagDraft('');
-
-    if (activeSiteTab === 'blacklist') {
-      await saveExtensionSettings({ blacklist: nextList });
-      return;
-    }
-
-    await saveExtensionSettings({ whitelist: nextList });
-  };
-
-  const removeTag = async (host: string) => {
-    const nextList = currentTagList.filter((item) => item !== host);
-
-    if (activeSiteTab === 'blacklist') {
-      await saveExtensionSettings({ blacklist: nextList });
-      return;
-    }
-
-    await saveExtensionSettings({ whitelist: nextList });
-  };
-
-  const handleTagInputKeyDown = async (event: React.KeyboardEvent<HTMLInputElement>) => {
-    if (event.key !== 'Enter') return;
-    event.preventDefault();
-    await commitTag(tagDraft);
-  };
-
-  const addCurrentHostToActiveTab = async () => {
-    if (!currentHost) return;
-    setTagDraft(currentHost);
-    await commitTag(currentHost);
-  };
-
   const openExportWorkspace = async () => {
     setExportState('loading');
 
@@ -335,54 +296,59 @@ function App() {
     await browser.tabs.create({ url: workspaceUrl });
   };
 
+  const openSitePolicyPage = async () => {
+    const workspaceUrl = `${browser.runtime.getURL('/dashboard.html' as never)}?section=site-policies`;
+    await browser.tabs.create({ url: workspaceUrl });
+  };
+
   return (
-    <div className="weicheng-control-center">
-      <header className="weicheng-dashboard-header">
-        <div className="weicheng-dashboard-header__title-wrap">
-          <h1 className="weicheng-dashboard-header__title">日语插件控制台</h1>
+    <div className="oye-control-center">
+      <header className="oye-dashboard-header">
+        <div className="oye-dashboard-header__title-wrap">
+          <h1 className="oye-dashboard-header__title">日语插件控制台</h1>
         </div>
-        <div className="weicheng-dashboard-header__toggle-wrap">
-          <span className={`weicheng-dashboard-header__status ${extensionSettings.globalEnabled ? 'is-on' : 'is-off'}`}>
+        <div className="oye-dashboard-header__toggle-wrap">
+          <span className={`oye-dashboard-header__status ${extensionSettings.globalEnabled ? 'is-on' : 'is-off'}`}>
             {extensionSettings.globalEnabled ? '运行中' : '已暂停'}
           </span>
           <button
             aria-label={extensionSettings.globalEnabled ? '暂停插件' : '启用插件'}
-            className={`weicheng-ios-switch ${extensionSettings.globalEnabled ? 'is-on' : ''}`}
+            className={`oye-ios-switch ${extensionSettings.globalEnabled ? 'is-on' : ''}`}
             onClick={toggleGlobalEnabled}
             type="button"
           >
-            <span className="weicheng-ios-switch__thumb" />
+            <span className="oye-ios-switch__thumb" />
           </button>
         </div>
       </header>
 
-      <main className="weicheng-dashboard-body">
+      <main className="oye-dashboard-body">
         {patchNotice ? (
-          <section className="weicheng-card weicheng-card--notice">
-            <div className="weicheng-card__header">
+          <section className="oye-card oye-card--notice">
+            <div className="oye-card__header">
               <div>
-                <h2 className="weicheng-card__title">更新提醒</h2>
-                <p className="weicheng-card__desc">{patchNotice}</p>
+                <h2 className="oye-card__title">更新提醒</h2>
+                <p className="oye-card__desc">{patchNotice}</p>
               </div>
             </div>
           </section>
         ) : null}
 
-        <section className="weicheng-card">
-          <div className="weicheng-card__header">
+        <section className="oye-card">
+          <div className="oye-card__header">
             <div>
-              <h2 className="weicheng-card__title">注音设置</h2>
-              <p className="weicheng-card__desc">模式、模板和细节样式都集中在这里。</p>
+              <h2 className="oye-card__title">注音设置</h2>
+              <p className="oye-card__desc">模式、模板和细节样式都集中在这里。</p>
             </div>
           </div>
           {settingsState === 'loading' ? (
             <PanelSkeleton lines={6} />
           ) : (
             <>
-              <div className="weicheng-field">
-                <label className="weicheng-field__label">显示模式</label>
+              <div className="oye-field">
+                <label className="oye-field__label">显示模式</label>
                 <select
-                  className="weicheng-select"
+                  className="oye-select"
                   value={extensionSettings.furiganaMode}
                   onChange={(event) => saveExtensionSettings({ furiganaMode: event.target.value as FuriganaMode })}
                 >
@@ -394,11 +360,11 @@ function App() {
                 </select>
               </div>
 
-              <div className="weicheng-preset-row">
+              <div className="oye-preset-row">
                 {TOOLTIP_PRESETS.map((preset) => (
                   <button
                     key={preset.label}
-                    className="weicheng-theme-pill"
+                    className="oye-theme-pill"
                     onClick={() => saveTooltipSettings(preset.settings)}
                     type="button"
                   >
@@ -407,27 +373,27 @@ function App() {
                 ))}
               </div>
 
-              <div className="weicheng-preview" style={previewStyle}>
-                <span className="weicheng-preview__text">
+              <div className="oye-preview" style={previewStyle}>
+                <span className="oye-preview__text">
                   私は <ruby>日本語<rt style={previewRtStyle}>にほんご</rt></ruby> を勉強します。
                 </span>
               </div>
 
               <button
-                className={`weicheng-advanced-toggle ${advancedOpen ? 'is-open' : ''}`}
+                className={`oye-advanced-toggle ${advancedOpen ? 'is-open' : ''}`}
                 onClick={() => setAdvancedOpen((current) => !current)}
                 type="button"
               >
                 <span>高级设置</span>
-                <ChevronDown className="weicheng-icon" {...ICON_PROPS} />
+                <ChevronDown className="oye-icon" {...ICON_PROPS} />
               </button>
 
-              <div className={`weicheng-advanced-panel ${advancedOpen ? 'is-open' : ''}`}>
-                <div className="weicheng-advanced-panel__inner">
-                  <div className="weicheng-field">
-                    <label className="weicheng-field__label">显示位置</label>
+              <div className={`oye-advanced-panel ${advancedOpen ? 'is-open' : ''}`}>
+                <div className="oye-advanced-panel__inner">
+                  <div className="oye-field">
+                    <label className="oye-field__label">显示位置</label>
                     <select
-                      className="weicheng-select"
+                      className="oye-select"
                       value={settings.position}
                       onChange={(event) => saveTooltipSettings({ position: event.target.value as TooltipSettings['position'] })}
                     >
@@ -490,18 +456,18 @@ function App() {
                     onChange={(value) => saveExtensionSettings({ ttsRate: value })}
                   />
 
-                  <div className="weicheng-inline-toggle">
+                  <div className="oye-inline-toggle">
                     <div>
-                      <label className="weicheng-field__label">自动播放朗读</label>
-                      <p className="weicheng-inline-toggle__desc">划词后自动播放当前单词或句子的读音。</p>
+                      <label className="oye-field__label">自动播放朗读</label>
+                      <p className="oye-inline-toggle__desc">划词后自动播放当前单词或句子的读音。</p>
                     </div>
                     <button
                       aria-label={extensionSettings.autoPlayAudio ? '关闭自动播放' : '开启自动播放'}
-                      className={`weicheng-ios-switch ${extensionSettings.autoPlayAudio ? 'is-on' : ''}`}
+                      className={`oye-ios-switch ${extensionSettings.autoPlayAudio ? 'is-on' : ''}`}
                       onClick={() => saveExtensionSettings({ autoPlayAudio: !extensionSettings.autoPlayAudio })}
                       type="button"
                     >
-                      <span className="weicheng-ios-switch__thumb" />
+                      <span className="oye-ios-switch__thumb" />
                     </button>
                   </div>
                 </div>
@@ -510,18 +476,18 @@ function App() {
           )}
         </section>
 
-        <section className="weicheng-card">
-          <div className="weicheng-card__header">
+        <section className="oye-card">
+          <div className="oye-card__header">
             <div>
-              <h2 className="weicheng-card__title">翻译跳转</h2>
-              <p className="weicheng-card__desc">控制 Tooltip 中“翻译”按钮的默认打开方式。</p>
+              <h2 className="oye-card__title">翻译跳转</h2>
+              <p className="oye-card__desc">控制 Tooltip 中“翻译”按钮的默认打开方式。</p>
             </div>
           </div>
 
-          <div className="weicheng-field">
-            <label className="weicheng-field__label">默认翻译引擎</label>
+          <div className="oye-field">
+            <label className="oye-field__label">默认翻译引擎</label>
             <select
-              className="weicheng-select"
+              className="oye-select"
               value={extensionSettings.translatorEngine}
               onChange={(event) => saveExtensionSettings({ translatorEngine: event.target.value as TranslatorEngine })}
             >
@@ -534,33 +500,33 @@ function App() {
           </div>
         </section>
 
-        <section className="weicheng-card">
-          <div className="weicheng-card__header">
+        <section className="oye-card">
+          <div className="oye-card__header">
             <div>
-              <h2 className="weicheng-card__title">站点策略</h2>
-              <p className="weicheng-card__desc">以标签方式管理黑白名单，并支持当前站快速切换。</p>
+              <h2 className="oye-card__title">站点策略</h2>
+              <p className="oye-card__desc">以标签方式管理黑白名单，并支持当前站快速切换。</p>
             </div>
           </div>
           {siteState === 'loading' ? (
-            <PanelSkeleton lines={4} compact />
+            <PanelSkeleton lines={3} compact />
           ) : (
             <>
-              <div className="weicheng-current-site">
-                <div className="weicheng-current-site__meta">
-                  <span className="weicheng-current-site__label">当前网页: {currentHost || '无法识别'}</span>
+              <div className="oye-current-site">
+                <div className="oye-current-site__meta">
+                  <span className="oye-current-site__label">当前网页: {currentHost || '无法识别'}</span>
                 </div>
-                <button className="weicheng-current-site__action" disabled={!currentHost} onClick={toggleCurrentSiteInActiveList} type="button">
+                <button className="oye-current-site__action" disabled={!currentHost} onClick={toggleCurrentSiteInActiveList} type="button">
                   {activeSiteTab === 'blacklist'
                     ? (currentSiteInActiveList ? '恢复启用' : '在此网站禁用')
                     : (currentSiteInActiveList ? '移出白名单' : '加入白名单')}
                 </button>
               </div>
 
-              <div className="weicheng-tab-switcher">
+              <div className="oye-tab-switcher">
                 {(['blacklist', 'whitelist'] as SiteTab[]).map((tab) => (
                   <button
                     key={tab}
-                    className={`weicheng-tab-switcher__tab ${activeSiteTab === tab ? 'is-active' : ''}`}
+                    className={`oye-tab-switcher__tab ${activeSiteTab === tab ? 'is-active' : ''}`}
                     onClick={() => void setSiteAccessMode(tab)}
                     type="button"
                   >
@@ -568,66 +534,39 @@ function App() {
                   </button>
                 ))}
               </div>
-
-              <div className="weicheng-field">
-                <label className="weicheng-field__label">
-                  {activeSiteTab === 'blacklist' ? '黑名单域名' : '白名单域名'}
-                </label>
-                <div className="weicheng-tag-input">
-                  <Plus className="weicheng-icon weicheng-tag-input__icon" {...ICON_PROPS} />
-                  <input
-                    className="weicheng-tag-input__control"
-                    placeholder="输入域名后按 Enter"
-                    value={tagDraft}
-                    onChange={(event) => setTagDraft(event.target.value)}
-                    onKeyDown={handleTagInputKeyDown}
-                  />
-                </div>
-                <button className="weicheng-helper-link" onClick={addCurrentHostToActiveTab} type="button">
-                  <Link2 className="weicheng-icon" {...ICON_PROPS} />
-                  <span>Add current: {currentHost || '当前页不可用'}</span>
-                </button>
-              </div>
-
-              <div className="weicheng-tag-list">
-                {currentTagList.map((host) => (
-                  <span className="weicheng-tag" key={host}>
-                    <span>{host}</span>
-                    <button className="weicheng-tag__remove" onClick={() => removeTag(host)} type="button">
-                      <X className="weicheng-icon" {...ICON_PROPS} />
-                    </button>
-                  </span>
-                ))}
-              </div>
+              <button className="oye-helper-link" onClick={() => void openSitePolicyPage()} type="button">
+                <Link2 className="oye-icon" {...ICON_PROPS} />
+                <span>查看更多，前往管理后台的“站点策略”</span>
+              </button>
             </>
           )}
         </section>
 
-        <section className="weicheng-card weicheng-card--export">
-          <div className="weicheng-card__header">
+        <section className="oye-card oye-card--export">
+          <div className="oye-card__header">
             <div>
-              <h2 className="weicheng-card__title">导出与管理</h2>
-              <p className="weicheng-card__desc">从这里进入后台页，继续编辑打印内容、查看收藏记录，或发起当前页导出。</p>
+              <h2 className="oye-card__title">导出与管理</h2>
+              <p className="oye-card__desc">从这里进入后台页，继续编辑打印内容、查看收藏记录，或发起当前页导出。</p>
             </div>
           </div>
 
-          <div className="weicheng-export-actions">
-            <button className="weicheng-secondary-action" onClick={() => void openDashboardPage()} type="button">
+          <div className="oye-export-actions">
+            <button className="oye-secondary-action" onClick={() => void openDashboardPage()} type="button">
               <span>进入管理页面</span>
             </button>
 
-            <button className="weicheng-primary-action" disabled={exportState === 'loading'} onClick={() => void openExportWorkspace()} type="button">
-              {exportState === 'loading' ? <LoaderCircle className="weicheng-icon weicheng-spin" {...ICON_PROPS} /> : <Download className="weicheng-icon" {...ICON_PROPS} />}
+            <button className="oye-primary-action" disabled={exportState === 'loading'} onClick={() => void openExportWorkspace()} type="button">
+              {exportState === 'loading' ? <LoaderCircle className="oye-icon oye-spin" {...ICON_PROPS} /> : <Download className="oye-icon" {...ICON_PROPS} />}
               <span>{exportState === 'loading' ? '正在准备工作台...' : '导出当前页面'}</span>
             </button>
           </div>
         </section>
       </main>
 
-      <div className={`weicheng-save-toast ${saveState !== 'idle' ? 'is-visible' : ''}`}>
+      <div className={`oye-save-toast ${saveState !== 'idle' ? 'is-visible' : ''}`}>
         {saveState === 'saving' ? 'Saving...' : (
           <>
-            <Check className="weicheng-icon" {...ICON_PROPS} />
+            <Check className="oye-icon" {...ICON_PROPS} />
             <span>已保存</span>
           </>
         )}
@@ -638,10 +577,10 @@ function App() {
 
 function PanelSkeleton({ lines, compact = false }: { lines: number; compact?: boolean }) {
   return (
-    <div className={`weicheng-panel-skeleton ${compact ? 'is-compact' : ''}`} aria-hidden="true">
+    <div className={`oye-panel-skeleton ${compact ? 'is-compact' : ''}`} aria-hidden="true">
       {Array.from({ length: lines }, (_, index) => (
         <span
-          className={`weicheng-panel-skeleton__line ${index === 0 ? 'is-wide' : index === lines - 1 ? 'is-short' : ''}`}
+          className={`oye-panel-skeleton__line ${index === 0 ? 'is-wide' : index === lines - 1 ? 'is-short' : ''}`}
           key={index}
         />
       ))}
@@ -665,10 +604,10 @@ function RangeField({
   value: number;
 }) {
   return (
-    <div className="weicheng-field">
-      <label className="weicheng-field__label">{label}</label>
+    <div className="oye-field">
+      <label className="oye-field__label">{label}</label>
       <input
-        className="weicheng-range"
+        className="oye-range"
         max={max}
         min={min}
         step={step}
@@ -679,7 +618,6 @@ function RangeField({
     </div>
   );
 }
-
 function normalizeHost(host: string) {
   return host.trim().toLowerCase().replace(/^https?:\/\//, '').replace(/^www\./, '').replace(/\/.*$/, '');
 }
