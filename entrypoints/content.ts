@@ -27,11 +27,20 @@ const styleId = 'furigana-dynamic-style';
 const reportModalId = 'oye-report-root';
 const MAX_TOOLTIP_CHARS = 100;
 const WORD_CARD_CHARS = 7;
+const TOOLTIP_VIEWPORT_MARGIN = 12;
+const TOOLTIP_SELECTION_GAP = 10;
+const MIN_TOOLTIP_VIEWPORT_HEIGHT = 160;
 const JAPANESE_TEXT_PATTERN = /[\u3040-\u30FF\u31F0-\u31FF\u4E00-\u9FFF]/;
 const LUCIDE_ICON_SIZE = 16;
 const LUCIDE_ICON_STROKE = 1.5;
 type SelectionContext = { prev: string; next: string };
 type ReportPayload = { word: string; reportContext: string; currentFurigana: string };
+type ReadingTag = 'possible_sokuon' | 'possible_polyphonic';
+
+const READING_TAG_LABELS: Record<ReadingTag, string> = {
+  possible_sokuon: '促音候选',
+  possible_polyphonic: '多音风险',
+};
 
 const TRANSLATOR_URL_BUILDERS: Record<TranslatorEngine, (text: string) => string> = {
   google: (text) => `https://translate.google.com/?sl=ja&tl=zh-CN&text=${encodeURIComponent(text)}&op=translate`,
@@ -216,19 +225,15 @@ export default defineContentScript({
       const settings = await loadTooltipSettings();
       applyStyles(settings);
 
-      let top = rect.top + window.scrollY - 50;
-      let left = rect.left + window.scrollX + rect.width / 2;
-      if (settings?.position === 'bottom') top = rect.bottom + window.scrollY + 10;
-      if (settings?.position === 'left') left = rect.left + window.scrollX - 10;
-      if (settings?.position === 'right') left = rect.right + window.scrollX + 10;
-
       if (!isPinned) {
-        overlay.style.left = `${left}px`;
-        overlay.style.top = `${top}px`;
-        overlay.style.transform = 'translateX(-50%)';
-        overlay.style.position = 'absolute';
+        overlay.style.left = '0';
+        overlay.style.top = '0';
+        overlay.style.transform = 'none';
+        overlay.style.position = 'fixed';
+        overlay.style.visibility = 'hidden';
         overlay.style.display = 'block';
       } else {
+        overlay.style.visibility = 'visible';
         overlay.style.display = 'block';
       }
 
@@ -242,6 +247,11 @@ export default defineContentScript({
         }
       } catch (err) {
         overlay.innerHTML = `<div class="error">转换失败</div>`;
+      }
+
+      if (!isPinned) {
+        positionOverlayNearSelection(rect, settings.position);
+        overlay.style.visibility = 'visible';
       }
     });
 
@@ -329,13 +339,88 @@ export default defineContentScript({
     };
 
     const setOverlayScreenPosition = (left: number, top: number) => {
-      const safeLeft = Math.max(12, Math.min(left, window.innerWidth - 24));
-      const safeTop = Math.max(12, Math.min(top, window.innerHeight - 24));
+      const viewport = getViewportBounds();
+      const rect = overlay.getBoundingClientRect();
+      const minLeft = viewport.left + TOOLTIP_VIEWPORT_MARGIN;
+      const minTop = viewport.top + TOOLTIP_VIEWPORT_MARGIN;
+      const maxLeft = Math.max(minLeft, viewport.right - rect.width - TOOLTIP_VIEWPORT_MARGIN);
+      const maxTop = Math.max(minTop, viewport.bottom - rect.height - TOOLTIP_VIEWPORT_MARGIN);
+      const safeLeft = Math.max(minLeft, Math.min(left, maxLeft));
+      const safeTop = Math.max(minTop, Math.min(top, maxTop));
       overlay.style.left = `${safeLeft}px`;
       overlay.style.top = `${safeTop}px`;
     };
 
-    const buildCardHeader = (badge: string) => {
+    const getViewportBounds = () => {
+      const viewport = window.visualViewport;
+      const left = viewport?.offsetLeft ?? 0;
+      const top = viewport?.offsetTop ?? 0;
+      const width = viewport?.width ?? window.innerWidth;
+      const height = viewport?.height ?? window.innerHeight;
+
+      return {
+        left,
+        top,
+        right: left + width,
+        bottom: top + height,
+        width,
+        height,
+      };
+    };
+
+    const constrainOverlayToViewport = () => {
+      const viewport = getViewportBounds();
+      const maxHeight = Math.max(MIN_TOOLTIP_VIEWPORT_HEIGHT, viewport.height - TOOLTIP_VIEWPORT_MARGIN * 2);
+      const maxWidth = Math.max(220, viewport.width - TOOLTIP_VIEWPORT_MARGIN * 2);
+      overlay.style.maxHeight = `${maxHeight}px`;
+      overlay.style.maxWidth = `${maxWidth}px`;
+      overlay.style.overflowY = 'auto';
+      overlay.style.overflowX = 'hidden';
+    };
+
+    const positionOverlayNearSelection = (
+      selectionRect: DOMRect,
+      preferredPosition: TooltipSettings['position'],
+    ) => {
+      constrainOverlayToViewport();
+      const tooltipRect = overlay.getBoundingClientRect();
+      const viewport = getViewportBounds();
+      const fits = {
+        top: selectionRect.top - tooltipRect.height - TOOLTIP_SELECTION_GAP >= viewport.top + TOOLTIP_VIEWPORT_MARGIN,
+        bottom: selectionRect.bottom + tooltipRect.height + TOOLTIP_SELECTION_GAP <= viewport.bottom - TOOLTIP_VIEWPORT_MARGIN,
+        left: selectionRect.left - tooltipRect.width - TOOLTIP_SELECTION_GAP >= viewport.left + TOOLTIP_VIEWPORT_MARGIN,
+        right: selectionRect.right + tooltipRect.width + TOOLTIP_SELECTION_GAP <= viewport.right - TOOLTIP_VIEWPORT_MARGIN,
+      };
+      const opposite: Record<TooltipSettings['position'], TooltipSettings['position']> = {
+        top: 'bottom',
+        bottom: 'top',
+        left: 'right',
+        right: 'left',
+      };
+      const fallbackOrder: TooltipSettings['position'][] = preferredPosition === 'left' || preferredPosition === 'right'
+        ? [preferredPosition, opposite[preferredPosition], 'top', 'bottom']
+        : [preferredPosition, opposite[preferredPosition], 'right', 'left'];
+      const position = fallbackOrder.find((candidate) => fits[candidate]) ?? preferredPosition;
+      const selectionCenterX = selectionRect.left + selectionRect.width / 2;
+      const selectionCenterY = selectionRect.top + selectionRect.height / 2;
+
+      let left = selectionCenterX - tooltipRect.width / 2;
+      let top = selectionRect.top - tooltipRect.height - TOOLTIP_SELECTION_GAP;
+
+      if (position === 'bottom') {
+        top = selectionRect.bottom + TOOLTIP_SELECTION_GAP;
+      } else if (position === 'left') {
+        left = selectionRect.left - tooltipRect.width - TOOLTIP_SELECTION_GAP;
+        top = selectionCenterY - tooltipRect.height / 2;
+      } else if (position === 'right') {
+        left = selectionRect.right + TOOLTIP_SELECTION_GAP;
+        top = selectionCenterY - tooltipRect.height / 2;
+      }
+
+      setOverlayScreenPosition(left, top);
+    };
+
+    const buildCardHeader = (badge: string, rubyHtml = '') => {
       const pinIcon = isPinned ? audioIcons.pinOff : audioIcons.pin;
       const pinLabel = isPinned ? '解除固定' : '固定卡片';
 
@@ -343,13 +428,23 @@ export default defineContentScript({
         <div class="oye-card-header">
           <div class="oye-card-header-main">
             <strong class="oye-card-title">划词日语注音</strong>
-            <span class="oye-card-badge">${badge}</span>
+            <div class="oye-card-badges">
+              <span class="oye-card-badge">${badge}</span>
+              ${buildReadingTagBadges(rubyHtml)}
+            </div>
           </div>
           <button aria-label="${pinLabel}" class="word-card-btn icon-btn oye-pin-btn ${isPinned ? 'is-pinned' : ''}" title="${pinLabel}" type="button">
             ${buildButtonContent(pinIcon, '')}
           </button>
         </div>
       `;
+    };
+
+    const buildReadingTagBadges = (rubyHtml: string) => {
+      const tags = extractReadingTags(rubyHtml);
+      if (!tags.length) return '';
+
+      return tags.map((tag) => `<span class="oye-card-badge oye-reading-tag">${READING_TAG_LABELS[tag]}</span>`).join('');
     };
 
     const updatePinButtonState = () => {
@@ -428,7 +523,7 @@ export default defineContentScript({
 
       overlay.innerHTML = `
         <div class="tooltip-panel">
-          ${buildCardHeader('句子')}
+          ${buildCardHeader('句子', html)}
           <div class="tooltip-body content">${html}</div>
           <div class="tooltip-footer-actions">
             <button aria-label="翻译" class="word-card-btn icon-btn translate-btn" title="翻译" type="button">${buildButtonContent(audioIcons.translate, '')}</button>
@@ -477,7 +572,7 @@ export default defineContentScript({
 
       overlay.innerHTML = `
         <div class="word-card">
-          ${buildCardHeader(tagLabel)}
+          ${buildCardHeader(tagLabel, rubyHtml)}
           <div class="card-furigana-row">
             <div class="card-furigana">
             ${rubyHtml}
@@ -610,6 +705,26 @@ function buildButtonContent(iconMarkup: string, label: string) {
       ${label ? `<span class="oye-btn-label">${label}</span>` : ''}
     </span>
   `;
+}
+
+function extractReadingTags(rubyHtml: string): ReadingTag[] {
+  const tags = new Set<ReadingTag>();
+  const matches = rubyHtml.matchAll(/data-reading-tags="([^"]+)"/g);
+
+  for (const match of matches) {
+    const values = (match[1] ?? '').split(/\s+/);
+    for (const value of values) {
+      if (isReadingTag(value)) {
+        tags.add(value);
+      }
+    }
+  }
+
+  return [...tags];
+}
+
+function isReadingTag(value: string): value is ReadingTag {
+  return value === 'possible_sokuon' || value === 'possible_polyphonic';
 }
 
 function setAudioButtonState(button: HTMLButtonElement | null | undefined, loading: boolean) {

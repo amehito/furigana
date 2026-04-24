@@ -14,6 +14,7 @@ export interface EditableToken {
   type: 'text' | 'ruby';
   text: string;
   reading?: string;
+  tags?: string[];
 }
 
 export interface ExportDraftBlock extends ExtractedPageBlock {
@@ -114,6 +115,7 @@ export function extractTokensFromRubyHtml(html: string): EditableToken[] {
     }
 
     const reading = node.querySelector('rt')?.textContent ?? '';
+    const tags = (node.dataset.readingTags ?? '').split(/\s+/).filter(Boolean);
     const baseText = Array.from(node.childNodes)
       .filter((child) => !(child instanceof HTMLElement) || !['rt', 'rp'].includes(child.tagName.toLowerCase()))
       .map((child) => child.textContent ?? '')
@@ -124,6 +126,7 @@ export function extractTokensFromRubyHtml(html: string): EditableToken[] {
       type: 'ruby',
       text: baseText,
       reading,
+      tags,
     });
   });
 
@@ -136,7 +139,8 @@ export function tokensToHtml(tokens: EditableToken[]) {
       return escapeHtml(token.text);
     }
 
-    return `<ruby>${escapeHtml(token.text)}<rt>${escapeHtml(token.reading ?? '')}</rt></ruby>`;
+    const tagAttribute = token.tags?.length ? ` data-reading-tags="${escapeHtml(token.tags.join(' '))}"` : '';
+    return `<ruby${tagAttribute}>${escapeHtml(token.text)}<rt>${escapeHtml(token.reading ?? '')}</rt></ruby>`;
   }).join('');
 }
 

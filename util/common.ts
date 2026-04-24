@@ -34,6 +34,11 @@ type RemoteOverride = {
 };
 type NumericCounterConfig = typeof NUMERIC_COUNTER_READING_MAP;
 type FixedReadingMap = Record<string, string>;
+type ReadingTag = 'possible_sokuon' | 'possible_polyphonic';
+type ReadingResult = {
+  reading: string;
+  tags?: ReadingTag[];
+};
 type SpecialCasesPayload = {
   version?: string;
   compounds?: Record<string, string[] | string>;
@@ -53,6 +58,67 @@ const PATCH_VERSION_STORAGE_KEY = 'furigana_patch_version';
 const PATCH_CHECKED_AT_STORAGE_KEY = 'furigana_patch_checked_at';
 const PATCH_NOTICE_STORAGE_KEY = 'furigana_patch_notice';
 const PATCH_REFRESH_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000;
+const SOKUON_PRONE_KANJI = new Set([
+  '一', '逸', '乙',
+  '各', '括', '活', '喝', '格', '確', '革', '客', '脚',
+  '学', '覚', '楽', '額',
+  '吉', '喫', '詰',
+  '結', '潔', '決',
+  '月',
+  '合',
+  '作', '冊', '察', '撮', '雑',
+  '失', '疾', '執', '湿', '質', '実',
+  '出', '術', '述',
+  '切', '接', '設', '節', '雪', '説', '絶',
+  '拙', '窃',
+  '卒', '率',
+  '達', '脱', '奪',
+  '着',
+  '直',
+  '徹', '撤', '鉄',
+  '突',
+  '日',
+  '発', '髪',
+  '匹',
+  '物',
+  '別',
+  '末',
+  '密',
+  '立', '律',
+  '六',
+]);
+const SOKUON_TRIGGER_INITIAL_PATTERN = /^[かきくけこさしすせそたちつてとはひふへほぱぴぷぺぽ]/;
+const SOKUON_FINAL_PATTERN = /(つ|ち|く)$/;
+const POLYPHONIC_RISK_KANJI = new Set([
+  '中',
+  '生',
+  '上',
+  '下',
+  '日',
+  '人',
+  '間',
+  '行',
+  '明',
+  '大',
+  '小',
+  '一',
+  '二',
+  '三',
+  '何',
+  '方',
+  '分',
+  '本',
+  '今',
+  '後',
+  '前',
+  '長',
+  '重',
+  '空',
+  '風',
+  '金',
+  '目',
+  '手',
+]);
 
 class FuriganaProcessor {
   private readonly segmenter = new Intl.Segmenter('ja-JP', { granularity: 'word' });
@@ -137,38 +203,41 @@ class FuriganaProcessor {
       }
 
       const localContext = this.createSegmentContext(text, segment, segmentIndex, context);
-      const reading = this.resolveReading(segment, localContext, overrides);
+      const readingResult = this.resolveReading(segment, localContext, overrides);
 
-      html += reading ? this.renderRuby(segment, reading) : this.fallbackConvert(segment);
+      html += readingResult ? this.renderRuby(segment, readingResult.reading, readingResult.tags) : this.fallbackConvert(segment);
     }
 
     return html;
   }
 
-  private resolveReading(text: string, context: ConvertContext, overrides: RemoteOverride[]): string | null {
+  private resolveReading(text: string, context: ConvertContext, overrides: RemoteOverride[]): ReadingResult | null {
     const normalized = text.trim();
     if (!normalized) return null;
 
     // 第一层：云端/本地补丁 (Remote & Local Overrides)
     const override = this.resolveRemoteOverride(normalized, context, overrides);
-    if (override) return override;
+    if (override) return { reading: override };
 
     const fixedReading = this.resolveMaintainedFixedReading(normalized);
-    if (fixedReading) return fixedReading;
+    if (fixedReading) return { reading: fixedReading };
 
     // 第二层：地名与专有名词判定 (Entity Recognition)
     const entityReading = this.entityMap.get(normalized);
-    if (entityReading) return entityReading;
+    if (entityReading) return { reading: entityReading };
 
     // 第三层：词法分析与送假名判定 (Morphological & Okurigana)
     const okuriganaReading = this.resolveOkurigana(normalized);
-    if (okuriganaReading) return okuriganaReading;
+    if (okuriganaReading) return { reading: okuriganaReading };
 
     const compoundReading = this.resolveCompound(normalized);
     if (compoundReading) return compoundReading;
 
     const polyphonicReading = this.resolvePolyphonicKanji(normalized);
-    if (polyphonicReading) return polyphonicReading;
+    if (polyphonicReading) return { reading: polyphonicReading };
+
+    const singleKanjiRiskReading = this.resolveSingleKanjiRiskReading(normalized);
+    if (singleKanjiRiskReading) return singleKanjiRiskReading;
 
     // 第四层：兜底转换 (Fallback)
     return null;
@@ -430,24 +499,61 @@ class FuriganaProcessor {
     return null;
   }
 
-  private resolveCompound(text: string): string | null {
+  private resolveCompound(text: string): ReadingResult | null {
     if (!ALL_KANJI_PATTERN.test(text) || text.length < 2) return null;
 
     let reading = '';
-    for (const char of text) {
+    const tags = new Set<ReadingTag>();
+    const chars = Array.from(text);
+
+    for (let index = 0; index < chars.length; index += 1) {
+      const char = chars[index];
       const entry = this.dict[char];
       if (!entry) return null;
+      if (POLYPHONIC_RISK_KANJI.has(char)) {
+        tags.add('possible_polyphonic');
+      }
 
       const candidate = entry.readings_on?.[0] || entry.readings_kun?.[0];
       if (!candidate) return null;
-      reading += candidate.replace(/[.\-!]/g, '');
+
+      const normalizedCandidate = this.normalizeReading(candidate);
+      const nextChar = chars[index + 1];
+      const nextEntry = nextChar ? this.dict[nextChar] : null;
+      const nextCandidate = nextEntry ? this.normalizeReading(nextEntry.readings_on?.[0] || nextEntry.readings_kun?.[0] || '') : '';
+
+      if (this.shouldApplySokuonBoundary(char, normalizedCandidate, nextCandidate)) {
+        reading += this.replaceTrailingForCompoundSokuon(normalizedCandidate);
+        tags.add('possible_sokuon');
+        continue;
+      }
+
+      reading += normalizedCandidate;
     }
 
-    return reading || null;
+    return reading ? { reading, tags: [...tags] } : null;
   }
 
   private resolvePolyphonicKanji(text: string): string | null {
     return null;
+  }
+
+  private resolveSingleKanjiRiskReading(text: string): ReadingResult | null {
+    if (text.length !== 1 || !POLYPHONIC_RISK_KANJI.has(text)) return null;
+
+    const entry = this.dict[text];
+    if (!entry) return null;
+
+    const kunReading = entry.readings_kun?.[0] || '';
+    const reading = kunReading.includes('.')
+      ? kunReading.split('.')[0]
+      : (kunReading || entry.readings_on?.[0] || '');
+    if (!reading) return null;
+
+    return {
+      reading: this.normalizeReading(reading),
+      tags: ['possible_polyphonic'],
+    };
   }
 
   private async getRemoteOverrides(): Promise<RemoteOverride[]> {
@@ -511,8 +617,23 @@ class FuriganaProcessor {
     return { prev, next };
   }
 
-  private renderRuby(text: string, reading: string): string {
-    return `<ruby>${text}<rt>${wanakana.toHiragana(reading.replace(/[.\-!]/g, ''))}</rt></ruby>`;
+  private normalizeReading(reading: string): string {
+    return reading.replace(/[.\-!]/g, '');
+  }
+
+  private shouldApplySokuonBoundary(char: string, reading: string, nextReading: string): boolean {
+    return SOKUON_PRONE_KANJI.has(char) &&
+      SOKUON_FINAL_PATTERN.test(reading) &&
+      SOKUON_TRIGGER_INITIAL_PATTERN.test(nextReading);
+  }
+
+  private replaceTrailingForCompoundSokuon(reading: string): string {
+    return reading.replace(SOKUON_FINAL_PATTERN, 'っ');
+  }
+
+  private renderRuby(text: string, reading: string, tags: ReadingTag[] = []): string {
+    const tagAttribute = tags.length ? ` data-reading-tags="${tags.join(' ')}"` : '';
+    return `<ruby${tagAttribute}>${text}<rt>${wanakana.toHiragana(this.normalizeReading(reading))}</rt></ruby>`;
   }
 }
 

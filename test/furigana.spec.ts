@@ -148,6 +148,52 @@ describe('furiganaService.convert', () => {
 
     expectRubyReadingsToMatch(extractRubyReadings(html), ['きょう']);
   });
+
+  it.each([
+    { input: '結果', expected: 'けっか' },
+    { input: '設計', expected: 'せっけい' },
+  ])('marks heuristic compound sokuon for $input', async ({ input, expected }) => {
+    setupFetchMock();
+    const service = await importFreshService();
+
+    const html = await service.convert(input, { prev: '', next: '' });
+
+    expectRubyReadingsToMatch(extractRubyReadings(html), [expected]);
+    expect(html).toContain('data-reading-tags="possible_sokuon"');
+  });
+
+  it('marks compound readings that contain high-risk polyphonic kanji', async () => {
+    setupFetchMock();
+    const service = await importFreshService();
+
+    const html = await service.convert('中間', { prev: '', next: '' });
+
+    expectRubyReadingsToMatch(extractRubyReadings(html), ['なかあいだ']);
+    expect(html).toContain('possible_polyphonic');
+  });
+
+  it('does not mark fixed readings as polyphonic-risk fallback readings', async () => {
+    setupFetchMock();
+    const service = await importFreshService();
+
+    const html = await service.convert('今日', { prev: '', next: '' });
+
+    expectRubyReadingsToMatch(extractRubyReadings(html), ['きょう']);
+    expect(html).not.toContain('possible_polyphonic');
+  });
+
+  it.each([
+    { input: '国際', expected: 'こくさい' },
+    { input: '目的', expected: 'もくてき' },
+  ])('does not force compound sokuon for $input', async ({ input, expected }) => {
+    setupFetchMock();
+    const service = await importFreshService();
+
+    const html = await service.convert(input, { prev: '', next: '' });
+
+    expectRubyReadingsToMatch(extractRubyReadings(html), [expected]);
+    expect(html).not.toContain('data-reading-tags="possible_sokuon"');
+  });
 });
 
 describe('furiganaService entity typing', () => {
