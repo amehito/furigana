@@ -305,7 +305,7 @@ function App() {
     <div className="oye-control-center">
       <header className="oye-dashboard-header">
         <div className="oye-dashboard-header__title-wrap">
-          <h1 className="oye-dashboard-header__title">日语插件控制台</h1>
+          <h1 className="oye-dashboard-header__title">瓯葉日语注音</h1>
         </div>
         <div className="oye-dashboard-header__toggle-wrap">
           <span className={`oye-dashboard-header__status ${extensionSettings.globalEnabled ? 'is-on' : 'is-off'}`}>

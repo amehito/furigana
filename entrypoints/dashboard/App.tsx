@@ -1,14 +1,18 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   BookMarked,
+  BookOpenText,
+  ChevronDown,
   Eraser,
   CheckCircle2,
   ExternalLink,
   ChevronUp,
-  Download,
   FileText,
+  GraduationCap,
   Languages,
   PencilLine,
+  PanelLeftClose,
+  PanelLeftOpen,
   Printer,
   RefreshCw,
   Trash2,
@@ -39,8 +43,10 @@ import {
 } from '../../util/favorites';
 
 const ICON_PROPS = { size: 24, strokeWidth: 1.75 };
-const SHOW_COMMUNITY_SECTION = false;
-type MenuKey = 'print' | 'favorites' | 'site-policies' | 'community';
+const COMMUNITY_STRATEGY_URL = 'https://cdn.jsdelivr.net/gh/amehito/japanese-dict-patch@main/data/strategy.json';
+const SHOW_COMMUNITY_SECTION = true;
+type MenuKey = 'print' | 'favorites' | 'beginner-kana' | 'beginner-grammar' | 'site-policies' | 'community';
+type KanaMode = 'hiragana' | 'katakana' | 'dakuten';
 const FULL_LOAD_MESSAGE = '警告：认知负荷已达上限！不消灭这些“死角”，新知识将无法进入。';
 
 const TRANSLATOR_URL_BUILDERS: Record<TranslatorEngine, (text: string) => string> = {
@@ -50,18 +56,108 @@ const TRANSLATOR_URL_BUILDERS: Record<TranslatorEngine, (text: string) => string
   papago: (text) => `https://papago.naver.com/?sk=ja&tk=zh-CN&st=${encodeURIComponent(text)}`,
 };
 const KANA_DISTRACTOR_POOL = ['あ', 'い', 'う', 'え', 'お', 'か', 'き', 'く', 'け', 'こ', 'さ', 'し', 'す', 'せ', 'そ', 'た', 'ち', 'つ', 'て', 'と', 'な', 'に', 'ぬ', 'ね', 'の', 'は', 'ひ', 'ふ', 'へ', 'ほ', 'ま', 'み', 'む', 'め', 'も', 'や', 'ゆ', 'よ', 'ら', 'り', 'る', 'れ', 'ろ', 'わ', 'ん', 'きゃ', 'きゅ', 'きょ', 'しゃ', 'しゅ', 'しょ', 'ちゃ', 'ちゅ', 'ちょ', 'にゃ', 'にゅ', 'にょ', 'ひゃ', 'ひゅ', 'ひょ', 'みゃ', 'みゅ', 'みょ', 'りゃ', 'りゅ', 'りょ', 'っ', 'ー'];
+const KANA_COLUMN_LABELS = ['あ段', 'い段', 'う段', 'え段', 'お段'];
+const KANA_MODE_LABELS: Record<KanaMode, string> = {
+  hiragana: '平假名',
+  katakana: '片假名',
+  dakuten: '混浊音',
+};
+const KANA_TABLES: Record<KanaMode, Array<{ label: string; kana: Array<string | null>; romaji: Array<string | null> }>> = {
+  hiragana: [
+    { label: 'あ行', kana: ['あ', 'い', 'う', 'え', 'お'], romaji: ['a', 'i', 'u', 'e', 'o'] },
+    { label: 'か行', kana: ['か', 'き', 'く', 'け', 'こ'], romaji: ['ka', 'ki', 'ku', 'ke', 'ko'] },
+    { label: 'さ行', kana: ['さ', 'し', 'す', 'せ', 'そ'], romaji: ['sa', 'shi', 'su', 'se', 'so'] },
+    { label: 'た行', kana: ['た', 'ち', 'つ', 'て', 'と'], romaji: ['ta', 'chi', 'tsu', 'te', 'to'] },
+    { label: 'な行', kana: ['な', 'に', 'ぬ', 'ね', 'の'], romaji: ['na', 'ni', 'nu', 'ne', 'no'] },
+    { label: 'は行', kana: ['は', 'ひ', 'ふ', 'へ', 'ほ'], romaji: ['ha', 'hi', 'fu', 'he', 'ho'] },
+    { label: 'ま行', kana: ['ま', 'み', 'む', 'め', 'も'], romaji: ['ma', 'mi', 'mu', 'me', 'mo'] },
+    { label: 'や行', kana: ['や', null, 'ゆ', null, 'よ'], romaji: ['ya', null, 'yu', null, 'yo'] },
+    { label: 'ら行', kana: ['ら', 'り', 'る', 'れ', 'ろ'], romaji: ['ra', 'ri', 'ru', 're', 'ro'] },
+    { label: 'わ行', kana: ['わ', null, null, null, 'を'], romaji: ['wa', null, null, null, 'wo'] },
+    { label: 'ん', kana: ['ん', null, null, null, null], romaji: ['n', null, null, null, null] },
+  ],
+  katakana: [
+    { label: 'ア行', kana: ['ア', 'イ', 'ウ', 'エ', 'オ'], romaji: ['a', 'i', 'u', 'e', 'o'] },
+    { label: 'カ行', kana: ['カ', 'キ', 'ク', 'ケ', 'コ'], romaji: ['ka', 'ki', 'ku', 'ke', 'ko'] },
+    { label: 'サ行', kana: ['サ', 'シ', 'ス', 'セ', 'ソ'], romaji: ['sa', 'shi', 'su', 'se', 'so'] },
+    { label: 'タ行', kana: ['タ', 'チ', 'ツ', 'テ', 'ト'], romaji: ['ta', 'chi', 'tsu', 'te', 'to'] },
+    { label: 'ナ行', kana: ['ナ', 'ニ', 'ヌ', 'ネ', 'ノ'], romaji: ['na', 'ni', 'nu', 'ne', 'no'] },
+    { label: 'ハ行', kana: ['ハ', 'ヒ', 'フ', 'ヘ', 'ホ'], romaji: ['ha', 'hi', 'fu', 'he', 'ho'] },
+    { label: 'マ行', kana: ['マ', 'ミ', 'ム', 'メ', 'モ'], romaji: ['ma', 'mi', 'mu', 'me', 'mo'] },
+    { label: 'ヤ行', kana: ['ヤ', null, 'ユ', null, 'ヨ'], romaji: ['ya', null, 'yu', null, 'yo'] },
+    { label: 'ラ行', kana: ['ラ', 'リ', 'ル', 'レ', 'ロ'], romaji: ['ra', 'ri', 'ru', 're', 'ro'] },
+    { label: 'ワ行', kana: ['ワ', null, null, null, 'ヲ'], romaji: ['wa', null, null, null, 'wo'] },
+    { label: 'ン', kana: ['ン', null, null, null, null], romaji: ['n', null, null, null, null] },
+  ],
+  dakuten: [
+    { label: 'が行', kana: ['が', 'ぎ', 'ぐ', 'げ', 'ご'], romaji: ['ga', 'gi', 'gu', 'ge', 'go'] },
+    { label: 'ざ行', kana: ['ざ', 'じ', 'ず', 'ぜ', 'ぞ'], romaji: ['za', 'ji', 'zu', 'ze', 'zo'] },
+    { label: 'だ行', kana: ['だ', 'ぢ', 'づ', 'で', 'ど'], romaji: ['da', 'ji', 'zu', 'de', 'do'] },
+    { label: 'ば行', kana: ['ば', 'び', 'ぶ', 'べ', 'ぼ'], romaji: ['ba', 'bi', 'bu', 'be', 'bo'] },
+    { label: 'ぱ行', kana: ['ぱ', 'ぴ', 'ぷ', 'ぺ', 'ぽ'], romaji: ['pa', 'pi', 'pu', 'pe', 'po'] },
+  ],
+};
+const BASIC_GRAMMAR_SECTIONS = [
+  {
+    title: 'です / ます：礼貌句的骨架',
+    pattern: '名词 + です / 动词ます形',
+    examples: ['学生です。', '日本語を勉強します。'],
+    note: 'です用于说明“是什么/怎么样”，ます用于礼貌地表达动作。',
+  },
+  {
+    title: 'は / が：主题和焦点',
+    pattern: 'A は ... / A が ...',
+    examples: ['私は学生です。', '雨が降っています。'],
+    note: 'は把话题端出来，が更像把重点打在主语本身或新信息上。',
+  },
+  {
+    title: 'を / に / で：动作的线索',
+    pattern: '对象 を / 方向或时间 に / 场所或手段 で',
+    examples: ['本を読みます。', '学校に行きます。', '駅で会います。'],
+    note: '先抓住“动作作用到谁、去向哪里、在哪里发生”，句子会清楚很多。',
+  },
+  {
+    title: '形容词：い形容词与な形容词',
+    pattern: '高いです / 静かです / 静かな町',
+    examples: ['この本は面白いです。', 'ここは静かです。'],
+    note: 'い形容词直接接名词，な形容词修饰名词时要加な。',
+  },
+  {
+    title: '否定和过去',
+    pattern: 'ではありません / ません / ました / ませんでした',
+    examples: ['学生ではありません。', '昨日、勉強しました。'],
+    note: '先从礼貌形入手，比一开始硬背所有普通形变化更稳。',
+  },
+  {
+    title: '疑问句：か',
+    pattern: '句子 + か',
+    examples: ['これは何ですか。', '明日行きますか。'],
+    note: '日语疑问句常在句尾加か，语序通常不用像中文或英文那样大幅改动。',
+  },
+];
 
 type ReviewChoice = {
   id: string;
   text: string;
   isDistractor: boolean;
 };
+type CommunityStrategy = {
+  version?: number;
+  updatedAt?: string;
+  email?: string;
+  wechat?: string;
+  url?: string;
+  groups?: unknown[];
+};
+type CommunityState = 'idle' | 'loading' | 'ready' | 'error';
 
 function App() {
   const [draft, setDraft] = useState<ExportWorkspaceDraft | null>(null);
   const [favorites, setFavorites] = useState<FavoriteItem[]>([]);
   const [history, setHistory] = useState<ExportHistoryItem[]>([]);
   const [activeMenu, setActiveMenu] = useState<MenuKey>(() => getInitialMenu());
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [openSubmenus, setOpenSubmenus] = useState<Record<string, boolean>>({ beginner: true });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [showBackToTop, setShowBackToTop] = useState(false);
@@ -76,6 +172,11 @@ function App() {
   const [reviewChoices, setReviewChoices] = useState<ReviewChoice[]>([]);
   const [selectedReviewChoiceIds, setSelectedReviewChoiceIds] = useState<string[]>([]);
   const [reviewError, setReviewError] = useState('');
+  const [communityStrategy, setCommunityStrategy] = useState<CommunityStrategy | null>(null);
+  const [communityState, setCommunityState] = useState<CommunityState>('idle');
+  const [communityError, setCommunityError] = useState('');
+  const [kanaMode, setKanaMode] = useState<KanaMode>('hiragana');
+  const [selectedKana, setSelectedKana] = useState('あ');
 
   useEffect(() => {
     const load = async () => {
@@ -168,6 +269,12 @@ function App() {
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
+  useEffect(() => {
+    if (activeMenu !== 'community' || communityState !== 'idle') return;
+
+    void loadCommunityStrategy(setCommunityStrategy, setCommunityState, setCommunityError);
+  }, [activeMenu, communityState]);
+
   const includedBlocks = useMemo(
     () => draft?.blocks.filter((block) => block.included) ?? [],
     [draft],
@@ -176,7 +283,8 @@ function App() {
   const favoriteCount = favorites.length;
   const loadPercent = Math.min(100, (favoriteCount / FAVORITES_LIMIT) * 100);
   const inboxFull = favoriteCount >= FAVORITES_LIMIT;
-  const communityQrImage = browser.runtime.getURL('/icon/128.png' as never);
+  const communityUrl = normalizeHttpUrl(communityStrategy?.url);
+  const dashboardLogo = browser.runtime.getURL('/icon/logo.svg' as never);
   const currentTagList = useMemo(
     () => activeSiteTab === 'blacklist' ? extensionSettings.blacklist : extensionSettings.whitelist,
     [activeSiteTab, extensionSettings.blacklist, extensionSettings.whitelist],
@@ -421,39 +529,55 @@ function App() {
       );
     }
 
+    if (activeMenu === 'beginner-kana') {
+      return (
+        <KanaLearningPanel
+          activeMode={kanaMode}
+          selectedKana={selectedKana}
+          onChangeMode={(mode) => {
+            setKanaMode(mode);
+            setSelectedKana(getFirstKana(mode));
+          }}
+          onSelectKana={(kana) => {
+            setSelectedKana(kana);
+            playAudio(kana);
+          }}
+        />
+      );
+    }
+
+    if (activeMenu === 'beginner-grammar') {
+      return <BasicGrammarPanel />;
+    }
+
     if (activeMenu === 'community') {
       return (
         <section className="workspace-panel workspace-panel--community">
           <div className="workspace-panel__header">
             <div>
-              <p className="workspace-kicker">加入群组</p>
+              <p className="workspace-kicker">加入社群</p>
               <h2>交流与反馈</h2>
-              <p className="workspace-meta">问题反馈、使用交流、功能建议，都可以在群里一起聊。</p>
+              <p className="workspace-meta">问题反馈、使用交流、功能建议，都可以从这里跳转到最新社群入口。</p>
             </div>
           </div>
 
-          <div className="community-grid">
-            <section className="community-card">
-              <h3>QQ群</h3>
-              <p>群号：123456789</p>
-              <p>适合日常答疑、版本更新通知、使用问题反馈。</p>
-            </section>
-
-            <section className="community-card">
-              <h3>微信群</h3>
-              <p>扫码添加</p>
-              <p>适合集中讨论需求、收集体验反馈、同步新功能。</p>
-            </section>
-          </div>
-
-          <section className="community-qr-panel">
-            <div className="community-qr-panel__copy">
-              <p className="workspace-kicker">群二维码</p>
-              <h3>临时占位图</h3>
-              <p className="workspace-meta">这里先放一张替代图片，后面换成真实 QQ 群或微信群二维码就行。</p>
-            </div>
-            <div className="community-qr-frame">
-              <img alt="群二维码占位图" className="community-qr-frame__image" src={communityQrImage} />
+          <section className="community-hero">
+            <div className="community-hero__copy">
+              <p className="workspace-kicker">Community Hub</p>
+              <h3>加入日语注音使用社群</h3>
+              <p>获取新版词典补丁、反馈注音问题、一起整理常见误读和学习场景。</p>
+              <div className="community-actions">
+                <button
+                  className="workspace-button community-primary-action"
+                  disabled={!communityUrl}
+                  onClick={() => communityUrl ? void browser.tabs.create({ url: communityUrl }) : undefined}
+                  type="button"
+                >
+                  <ExternalLink size={20} strokeWidth={1.8} />
+                  <span>{communityState === 'loading' ? '正在读取入口' : '打开社群入口'}</span>
+                </button>
+              </div>
+              {!communityUrl && communityState === 'error' ? <p className="community-error">{communityError}</p> : null}
             </div>
           </section>
         </section>
@@ -648,22 +772,33 @@ function App() {
   };
 
   return (
-    <div className="workspace-shell">
+    <div className={`workspace-shell ${sidebarCollapsed ? 'is-nav-collapsed' : ''}`}>
       <aside className="workspace-sidebar">
         <div className="workspace-brand">
-          <div className="workspace-brand__icon">
-            <Download {...ICON_PROPS} />
+       
+          <button
+            aria-label={sidebarCollapsed ? '展开菜单' : '收起菜单'}
+            aria-pressed={sidebarCollapsed}
+            className="workspace-sidebar__toggle"
+            onClick={() => setSidebarCollapsed((current) => !current)}
+            title={sidebarCollapsed ? '展开菜单' : '收起菜单'}
+            type="button"
+          >
+               <div className="workspace-brand__icon">
+            <img alt="" className="workspace-brand__logo" src={dashboardLogo} />
           </div>
-          <div>
-            <p>日语注音导出</p>
-            <strong>管理后台</strong>
+        
+          </button>
+            <div className="workspace-brand__text">
+            <strong>瓯葉划词</strong>
           </div>
         </div>
 
-        <nav className="workspace-nav">
+        <nav aria-label="管理后台菜单" className="workspace-nav">
           <button
             className={`workspace-nav__item ${activeMenu === 'print' ? 'is-active' : ''}`}
             onClick={() => setActiveMenu('print')}
+            title="打印内容"
             type="button"
           >
             <FileText {...ICON_PROPS} />
@@ -672,14 +807,55 @@ function App() {
           <button
             className={`workspace-nav__item ${activeMenu === 'favorites' ? 'is-active' : ''}`}
             onClick={() => setActiveMenu('favorites')}
+            title="收藏记录"
             type="button"
           >
             <BookMarked {...ICON_PROPS} />
             <span>收藏记录</span>
           </button>
+          <div className={`workspace-nav__group ${openSubmenus.beginner && !sidebarCollapsed ? 'is-open' : ''}`}>
+            <button
+              aria-expanded={openSubmenus.beginner && !sidebarCollapsed}
+              className={`workspace-nav__item workspace-nav__item--parent ${activeMenu.startsWith('beginner-') ? 'is-active' : ''}`}
+              onClick={() => {
+                if (sidebarCollapsed) {
+                  setSidebarCollapsed(false);
+                  setOpenSubmenus((current) => ({ ...current, beginner: true }));
+                  return;
+                }
+
+                setOpenSubmenus((current) => ({ ...current, beginner: !current.beginner }));
+              }}
+              title="入门学习"
+              type="button"
+            >
+              <GraduationCap {...ICON_PROPS} />
+              <span>入门学习</span>
+              <ChevronDown className="workspace-nav__chevron" size={18} strokeWidth={1.8} />
+            </button>
+            <div className="workspace-nav__submenu">
+              <button
+                className={`workspace-nav__subitem ${activeMenu === 'beginner-kana' ? 'is-active' : ''}`}
+                onClick={() => setActiveMenu('beginner-kana')}
+                type="button"
+              >
+                <BookOpenText size={18} strokeWidth={1.8} />
+                <span>五十音图</span>
+              </button>
+              <button
+                className={`workspace-nav__subitem ${activeMenu === 'beginner-grammar' ? 'is-active' : ''}`}
+                onClick={() => setActiveMenu('beginner-grammar')}
+                type="button"
+              >
+                <PencilLine size={18} strokeWidth={1.8} />
+                <span>基础语法</span>
+              </button>
+            </div>
+          </div>
           <button
             className={`workspace-nav__item ${activeMenu === 'site-policies' ? 'is-active' : ''}`}
             onClick={() => setActiveMenu('site-policies')}
+            title="站点策略"
             type="button"
           >
             <Languages {...ICON_PROPS} />
@@ -689,10 +865,11 @@ function App() {
             <button
               className={`workspace-nav__item ${activeMenu === 'community' ? 'is-active' : ''}`}
               onClick={() => setActiveMenu('community')}
+              title="加入社群"
               type="button"
             >
               <Users {...ICON_PROPS} />
-              <span>加入群组</span>
+              <span>加入社群</span>
             </button>
           ) : null}
         </nav>
@@ -735,11 +912,176 @@ function getInitialMenu(): MenuKey {
   if (section === 'site-policies') {
     return 'site-policies';
   }
+  if (section === 'beginner' || section === 'beginner-kana') {
+    return 'beginner-kana';
+  }
+  if (section === 'beginner-grammar') {
+    return 'beginner-grammar';
+  }
   if (SHOW_COMMUNITY_SECTION && section === 'community') {
     return 'community';
   }
 
   return 'print';
+}
+
+function getFirstKana(mode: KanaMode) {
+  return KANA_TABLES[mode].flatMap((row) => row.kana).find((kana): kana is string => Boolean(kana)) ?? 'あ';
+}
+
+function BasicGrammarPanel() {
+  return (
+    <section className="workspace-panel workspace-panel--grammar">
+      <div className="workspace-panel__header">
+        <div>
+          <p className="workspace-kicker">入门学习</p>
+          <h2>基础语法</h2>
+          <p className="workspace-meta">先建立能读懂简单句子的框架：判断句、助词、形容词、时态和疑问句。</p>
+        </div>
+      </div>
+
+      <div className="grammar-grid">
+        {BASIC_GRAMMAR_SECTIONS.map((section) => (
+          <article className="grammar-card" key={section.title}>
+            <div>
+              <p className="grammar-card__pattern">{section.pattern}</p>
+              <h3>{section.title}</h3>
+            </div>
+            <div className="grammar-card__examples">
+              {section.examples.map((example) => <span key={example}>{example}</span>)}
+            </div>
+            <p>{section.note}</p>
+          </article>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function KanaLearningPanel({
+  activeMode,
+  selectedKana,
+  onChangeMode,
+  onSelectKana,
+}: {
+  activeMode: KanaMode;
+  selectedKana: string;
+  onChangeMode: (mode: KanaMode) => void;
+  onSelectKana: (kana: string) => void;
+}) {
+  const rows = KANA_TABLES[activeMode];
+  const selectedRomaji = rows
+    .flatMap((row) => row.kana.map((kana, index) => ({ kana, romaji: row.romaji[index] })))
+    .find((item) => item.kana === selectedKana)?.romaji;
+
+  return (
+    <section className="workspace-panel workspace-panel--kana">
+      <div className="workspace-panel__header">
+        <div>
+          <p className="workspace-kicker">入门学习</p>
+          <h2>五十音图</h2>
+          <p className="workspace-meta">点假名听发音，切换表格类型后可以直接在右侧 panel 里练字。</p>
+        </div>
+      </div>
+
+      <div className="kana-mode-switcher" role="tablist" aria-label="五十音类型">
+        {(['hiragana', 'katakana', 'dakuten'] as KanaMode[]).map((mode) => (
+          <button
+            aria-selected={activeMode === mode}
+            className={`kana-mode-switcher__tab ${activeMode === mode ? 'is-active' : ''}`}
+            key={mode}
+            onClick={() => onChangeMode(mode)}
+            role="tab"
+            type="button"
+          >
+            {KANA_MODE_LABELS[mode]}
+          </button>
+        ))}
+      </div>
+
+      <div className="kana-learning-layout">
+        <div className="kana-table-wrap">
+          <div className="kana-table kana-table--header">
+            <span />
+            {KANA_COLUMN_LABELS.map((label) => <span key={label}>{label}</span>)}
+          </div>
+          {rows.map((row) => (
+            <div className="kana-table" key={row.label}>
+              <span className="kana-table__row-label">{row.label}</span>
+              {row.kana.map((kana, index) => kana ? (
+                <button
+                  aria-label={`播放 ${kana}`}
+                  className={`kana-cell ${selectedKana === kana ? 'is-active' : ''}`}
+                  key={`${row.label}-${kana}`}
+                  onClick={() => onSelectKana(kana)}
+                  type="button"
+                >
+                  <strong>{kana}</strong>
+                  <span>{row.romaji[index]}</span>
+                  <Volume2 size={16} strokeWidth={1.8} />
+                </button>
+              ) : (
+                <span aria-hidden="true" className="kana-cell kana-cell--empty" key={`${row.label}-empty-${index}`} />
+              ))}
+            </div>
+          ))}
+        </div>
+
+        <aside className="kana-practice-panel">
+          <div className="kana-practice-panel__header">
+            <span>当前练习</span>
+            <button className="favorite-card__action" onClick={() => playAudio(selectedKana)} type="button">
+              <Volume2 size={18} strokeWidth={1.8} />
+              <span>播放</span>
+            </button>
+          </div>
+          <p className="kana-practice-panel__glyph">{selectedKana}</p>
+          <p className="kana-practice-panel__romaji">{selectedRomaji}</p>
+          <WritingPracticeCanvas className="kana-writing-panel" targetText={selectedKana} />
+        </aside>
+      </div>
+    </section>
+  );
+}
+
+async function loadCommunityStrategy(
+  setCommunityStrategy: React.Dispatch<React.SetStateAction<CommunityStrategy | null>>,
+  setCommunityState: React.Dispatch<React.SetStateAction<CommunityState>>,
+  setCommunityError: React.Dispatch<React.SetStateAction<string>>,
+) {
+  setCommunityState('loading');
+  setCommunityError('');
+
+  try {
+    const response = await fetch(COMMUNITY_STRATEGY_URL, { cache: 'no-store' });
+    if (!response.ok) {
+      throw new Error(`社群入口读取失败：HTTP ${response.status}`);
+    }
+
+    const payload = await response.json() as CommunityStrategy;
+    const url = normalizeHttpUrl(payload.url);
+    if (!url) {
+      throw new Error('远端配置里暂时没有可用的社群链接。');
+    }
+
+    setCommunityStrategy({ ...payload, url });
+    setCommunityState('ready');
+  } catch (error) {
+    setCommunityStrategy(null);
+    setCommunityError(error instanceof Error ? error.message : '社群入口读取失败。');
+    setCommunityState('error');
+  }
+}
+
+function normalizeHttpUrl(value: unknown) {
+  if (typeof value !== 'string') return '';
+
+  try {
+    const url = new URL(value);
+    return ['http:', 'https:'].includes(url.protocol) ? url.toString() : '';
+  } catch {
+    return '';
+  }
 }
 
 function BlockPreview({ block, printable = false }: { block: ExportDraftBlock; printable?: boolean }) {
@@ -1128,6 +1470,13 @@ function drawPracticeCanvas(context: CanvasRenderingContext2D, size: number, tex
   context.fillStyle = 'rgba(182, 91, 58, 0.12)';
   context.textAlign = 'center';
   context.textBaseline = 'middle';
+
+  if (glyphs.length === 1) {
+    context.font = `${Math.round(size * 0.7)}px "Hiragino Mincho ProN", "Yu Mincho", serif`;
+    context.fillText(glyphs[0]!, size / 2, size / 2);
+    return;
+  }
+
   context.font = '128px "Hiragino Mincho ProN", "Yu Mincho", serif';
 
   glyphs.forEach((glyph, index) => {
@@ -1144,28 +1493,14 @@ function getCanvasPoint(event: React.PointerEvent<HTMLCanvasElement>) {
 
 export default App;
 
-function FavoriteReviewDialog({
-  availableChoices,
-  item,
-  onClose,
-  onPickChoice,
-  onRemoveChoice,
+function WritingPracticeCanvas({
+  className = '',
   onReset,
-  reviewError,
-  reviewReading,
-  rubyHtml,
-  selectedChoices,
+  targetText,
 }: {
-  availableChoices: ReviewChoice[];
-  item: FavoriteItem;
-  onClose: () => void;
-  onPickChoice: (choice: ReviewChoice) => void;
-  onRemoveChoice: (choiceId: string) => void;
-  onReset: () => void;
-  reviewError: string;
-  reviewReading: string;
-  rubyHtml: string;
-  selectedChoices: ReviewChoice[];
+  className?: string;
+  onReset?: () => void;
+  targetText: string;
 }) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const drawingRef = useRef(false);
@@ -1179,7 +1514,7 @@ function FavoriteReviewDialog({
     const context = canvas?.getContext('2d');
     if (!canvas || !context) return;
 
-    drawPracticeCanvas(context, CANVAS_SIZE, item.text);
+    drawPracticeCanvas(context, CANVAS_SIZE, targetText);
     strokesRef.current.forEach((stroke) => {
       if (stroke.length < 2) return;
       context.strokeStyle = '#8e3d22';
@@ -1212,8 +1547,8 @@ function FavoriteReviewDialog({
     context.setTransform(ratio, 0, 0, ratio, 0, 0);
     strokesRef.current = [];
     activeStrokeRef.current = null;
-    drawPracticeCanvas(context, size, item.text);
-  }, [item.text]);
+    drawPracticeCanvas(context, size, targetText);
+  }, [targetText]);
 
   const drawStroke = (event: React.PointerEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current;
@@ -1255,9 +1590,79 @@ function FavoriteReviewDialog({
 
   const resetAll = () => {
     clearCanvas();
-    onReset();
+    onReset?.();
   };
 
+  return (
+    <div className={`favorite-review-practice ${className}`}>
+      <canvas
+        className="favorite-review-practice__canvas"
+        onPointerDown={(event) => {
+          drawingRef.current = true;
+          const startPoint = getCanvasPoint(event);
+          lastPointRef.current = startPoint;
+          activeStrokeRef.current = [startPoint];
+        }}
+        onPointerLeave={() => {
+          drawingRef.current = false;
+          lastPointRef.current = null;
+          if (activeStrokeRef.current?.length) {
+            strokesRef.current = [...strokesRef.current, activeStrokeRef.current];
+          }
+          activeStrokeRef.current = null;
+        }}
+        onPointerMove={drawStroke}
+        onPointerUp={() => {
+          drawingRef.current = false;
+          lastPointRef.current = null;
+          if (activeStrokeRef.current?.length) {
+            strokesRef.current = [...strokesRef.current, activeStrokeRef.current];
+          }
+          activeStrokeRef.current = null;
+        }}
+        ref={canvasRef}
+      />
+      <div className="favorite-review-practice__actions">
+        <button className="favorite-card__action" onClick={clearCanvas} type="button">
+          <Eraser size={18} strokeWidth={1.8} />
+          <span>清除</span>
+        </button>
+        <button className="favorite-card__action" onClick={undoLastStroke} type="button">
+          <PencilLine size={18} strokeWidth={1.8} />
+          <span>撤销一笔</span>
+        </button>
+        <button className="favorite-card__action" onClick={resetAll} type="button">
+          <X size={18} strokeWidth={1.8} />
+          <span>重置</span>
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function FavoriteReviewDialog({
+  availableChoices,
+  item,
+  onClose,
+  onPickChoice,
+  onRemoveChoice,
+  onReset,
+  reviewError,
+  reviewReading,
+  rubyHtml,
+  selectedChoices,
+}: {
+  availableChoices: ReviewChoice[];
+  item: FavoriteItem;
+  onClose: () => void;
+  onPickChoice: (choice: ReviewChoice) => void;
+  onRemoveChoice: (choiceId: string) => void;
+  onReset: () => void;
+  reviewError: string;
+  reviewReading: string;
+  rubyHtml: string;
+  selectedChoices: ReviewChoice[];
+}) {
   return (
     <div className="favorite-review-backdrop" onClick={onClose} role="presentation">
       <dialog aria-modal="true" className="favorite-review-dialog" onClick={(event) => event.stopPropagation()} open>
@@ -1277,49 +1682,7 @@ function FavoriteReviewDialog({
             <div className="favorite-review-dialog__ruby" dangerouslySetInnerHTML={{ __html: rubyHtml || item.text }} />
           </div>
 
-          <div className="favorite-review-practice">
-            <canvas
-              className="favorite-review-practice__canvas"
-              onPointerDown={(event) => {
-                drawingRef.current = true;
-                const startPoint = getCanvasPoint(event);
-                lastPointRef.current = startPoint;
-                activeStrokeRef.current = [startPoint];
-              }}
-              onPointerLeave={() => {
-                drawingRef.current = false;
-                lastPointRef.current = null;
-                if (activeStrokeRef.current?.length) {
-                  strokesRef.current = [...strokesRef.current, activeStrokeRef.current];
-                }
-                activeStrokeRef.current = null;
-              }}
-              onPointerMove={drawStroke}
-              onPointerUp={() => {
-                drawingRef.current = false;
-                lastPointRef.current = null;
-                if (activeStrokeRef.current?.length) {
-                  strokesRef.current = [...strokesRef.current, activeStrokeRef.current];
-                }
-                activeStrokeRef.current = null;
-              }}
-              ref={canvasRef}
-            />
-            <div className="favorite-review-practice__actions">
-              <button className="favorite-card__action" onClick={clearCanvas} type="button">
-                <Eraser size={18} strokeWidth={1.8} />
-                <span>清除</span>
-              </button>
-              <button className="favorite-card__action" onClick={undoLastStroke} type="button">
-                <PencilLine size={18} strokeWidth={1.8} />
-                <span>撤销一笔</span>
-              </button>
-              <button className="favorite-card__action" onClick={resetAll} type="button">
-                <X size={18} strokeWidth={1.8} />
-                <span>重置选择</span>
-              </button>
-            </div>
-          </div>
+          <WritingPracticeCanvas onReset={onReset} targetText={item.text} />
 
           <div className="favorite-review-keyboard">
             <div className="favorite-review-keyboard__status">

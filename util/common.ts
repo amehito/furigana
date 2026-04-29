@@ -38,6 +38,7 @@ type ReadingTag = 'possible_sokuon' | 'possible_polyphonic';
 type ReadingResult = {
   reading: string;
   tags?: ReadingTag[];
+  alternativeReadings?: string[];
 };
 type SpecialCasesPayload = {
   version?: string;
@@ -89,6 +90,25 @@ const SOKUON_PRONE_KANJI = new Set([
 ]);
 const SOKUON_TRIGGER_INITIAL_PATTERN = /^[かきくけこさしすせそたちつてとはひふへほぱぴぷぺぽ]/;
 const SOKUON_FINAL_PATTERN = /(つ|ち|く)$/;
+const GODAN_RU_CONJUGATED_PREFIXES = ['ら', 'り', 'れ', 'ろ', 'っ'];
+const ICHIDAN_RU_CONJUGATED_SUFFIXES = [
+  'ない',
+  'なく',
+  'なかった',
+  'ます',
+  'ました',
+  'ません',
+  'ませんでした',
+  'て',
+  'た',
+  'れば',
+  'ろ',
+  'よう',
+  'られる',
+  'られた',
+  'させる',
+  'させた',
+];
 const POLYPHONIC_RISK_KANJI = new Set([
   '中',
   '生',
@@ -190,6 +210,18 @@ class FuriganaProcessor {
         continue;
       }
 
+      const okuriganaMatch = this.matchOkuriganaAt(text, cursor, context, overrides);
+      if (okuriganaMatch) {
+        html += this.renderRuby(
+          okuriganaMatch.text,
+          okuriganaMatch.result.reading,
+          okuriganaMatch.result.tags,
+          okuriganaMatch.result.alternativeReadings,
+        );
+        cursor += okuriganaMatch.text.length;
+        continue;
+      }
+
       const nextSegment = this.getNextSegment(text, cursor);
       if (!nextSegment) break;
 
@@ -205,7 +237,9 @@ class FuriganaProcessor {
       const localContext = this.createSegmentContext(text, segment, segmentIndex, context);
       const readingResult = this.resolveReading(segment, localContext, overrides);
 
-      html += readingResult ? this.renderRuby(segment, readingResult.reading, readingResult.tags) : this.fallbackConvert(segment);
+      html += readingResult
+        ? this.renderRuby(segment, readingResult.reading, readingResult.tags, readingResult.alternativeReadings)
+        : this.fallbackConvert(segment);
     }
 
     return html;
@@ -228,7 +262,7 @@ class FuriganaProcessor {
 
     // 第三层：词法分析与送假名判定 (Morphological & Okurigana)
     const okuriganaReading = this.resolveOkurigana(normalized);
-    if (okuriganaReading) return { reading: okuriganaReading };
+    if (okuriganaReading) return okuriganaReading;
 
     const compoundReading = this.resolveCompound(normalized);
     if (compoundReading) return compoundReading;
@@ -301,6 +335,28 @@ class FuriganaProcessor {
 
     const reading = this.buildNumericCounterReading(number, suffix);
     return reading ? { text: expression, reading } : null;
+  }
+
+  private matchOkuriganaAt(
+    text: string,
+    cursor: number,
+    context: ConvertContext,
+    overrides: RemoteOverride[],
+  ): { text: string; result: ReadingResult } | null {
+    const matched = text.slice(cursor).match(/^([\u4E00-\u9FFF][ぁ-ん]+)/);
+    if (!matched) return null;
+
+    const okuriganaText = matched[1];
+    for (let length = okuriganaText.length; length > 1; length -= 1) {
+      const candidate = okuriganaText.slice(0, length);
+      if (!OKURIGANA_PATTERN.test(candidate)) continue;
+
+      const localContext = this.createSegmentContext(text, candidate, cursor, context);
+      const result = this.resolveReading(candidate, localContext, overrides);
+      if (result) return { text: candidate, result };
+    }
+
+    return null;
   }
 
   private buildNumericCounterReading(
@@ -463,7 +519,7 @@ class FuriganaProcessor {
     return `${DIGIT_READINGS[value]}せん`;
   }
 
-  private resolveOkurigana(text: string): string | null {
+  private resolveOkurigana(text: string): ReadingResult | null {
     const okuriganaMatch = text.match(OKURIGANA_PATTERN);
     if (!okuriganaMatch) return null;
 
@@ -473,7 +529,7 @@ class FuriganaProcessor {
     return null;
   }
 
-  private resolveOkuriganaFromDictionary(kanjiPart: string, kanaPart: string): string | null {
+  private resolveOkuriganaFromDictionary(kanjiPart: string, kanaPart: string): ReadingResult | null {
     if (kanjiPart.length !== 1) return null;
 
     const entry = this.dict[kanjiPart];
@@ -482,18 +538,50 @@ class FuriganaProcessor {
     return this.resolveOkuriganaFromCandidates(entry.readings_kun, kanaPart);
   }
 
-  private resolveOkuriganaFromCandidates(candidates: string[] | undefined, kanaPart: string): string | null {
+  private resolveOkuriganaFromCandidates(candidates: string[] | undefined, kanaPart: string): ReadingResult | null {
     if (!Array.isArray(candidates) || !candidates.length) return null;
 
+    const matches: string[] = [];
     for (const rawCandidate of candidates) {
       const candidate = rawCandidate.replace(/[!\-]/g, '');
       if (!candidate.includes('.')) continue;
 
       const [stem, ...suffixParts] = candidate.split('.');
       const suffix = suffixParts.join('');
-      if (suffix !== kanaPart) continue;
+      const reading = this.resolveOkuriganaCandidateReading(stem, suffix, kanaPart);
+      if (!reading) continue;
 
-      return `${stem}${suffix}`;
+      matches.push(reading);
+    }
+
+    if (!matches.length) return null;
+
+    const [reading, ...alternativeReadings] = [...new Set(matches)];
+    return {
+      reading,
+      tags: alternativeReadings.length ? ['possible_polyphonic'] : [],
+      alternativeReadings,
+    };
+  }
+
+  private resolveOkuriganaCandidateReading(stem: string, suffix: string, kanaPart: string): string | null {
+    if (suffix === kanaPart) return `${stem}${suffix}`;
+    if (!suffix.endsWith('る')) return null;
+
+    const suffixStem = suffix.slice(0, -1);
+    if (suffixStem && kanaPart.startsWith(suffixStem)) {
+      const conjugatedTail = kanaPart.slice(suffixStem.length);
+      if (ICHIDAN_RU_CONJUGATED_SUFFIXES.some((ending) => conjugatedTail.startsWith(ending))) {
+        return `${stem}${kanaPart}`;
+      }
+    }
+
+    if (!suffixStem && GODAN_RU_CONJUGATED_PREFIXES.some((prefix) => kanaPart.startsWith(prefix))) {
+      return `${stem}${kanaPart}`;
+    }
+
+    if (!suffixStem && ICHIDAN_RU_CONJUGATED_SUFFIXES.some((ending) => kanaPart.startsWith(ending))) {
+      return `${stem}${kanaPart}`;
     }
 
     return null;
@@ -631,9 +719,20 @@ class FuriganaProcessor {
     return reading.replace(SOKUON_FINAL_PATTERN, 'っ');
   }
 
-  private renderRuby(text: string, reading: string, tags: ReadingTag[] = []): string {
+  private renderRuby(text: string, reading: string, tags: ReadingTag[] = [], alternativeReadings: string[] = []): string {
     const tagAttribute = tags.length ? ` data-reading-tags="${tags.join(' ')}"` : '';
-    return `<ruby${tagAttribute}>${text}<rt>${wanakana.toHiragana(this.normalizeReading(reading))}</rt></ruby>`;
+    const alternativeAttribute = alternativeReadings.length
+      ? ` data-reading-alternatives="${alternativeReadings.map((item) => this.escapeAttribute(wanakana.toHiragana(this.normalizeReading(item)))).join('|')}"`
+      : '';
+    return `<ruby${tagAttribute}${alternativeAttribute}>${text}<rt>${wanakana.toHiragana(this.normalizeReading(reading))}</rt></ruby>`;
+  }
+
+  private escapeAttribute(value: string): string {
+    return value
+      .replace(/&/g, '&amp;')
+      .replace(/"/g, '&quot;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
   }
 }
 

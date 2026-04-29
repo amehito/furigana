@@ -182,6 +182,38 @@ describe('furiganaService.convert', () => {
     expect(html).not.toContain('possible_polyphonic');
   });
 
+  it('marks okurigana readings with multiple matching kun candidates as polyphonic', async () => {
+    setupFetchMock();
+    const service = await importFreshService();
+
+    const html = await service.convert('被る', { prev: '', next: '' });
+
+    expectRubyReadingsToMatch(extractRubyReadings(html), ['こうむる']);
+    expect(html).toContain('data-reading-tags="possible_polyphonic"');
+    expect(html).toContain('data-reading-alternatives="かぶる"');
+  });
+
+  it('marks conjugated ru-verb okurigana readings with multiple matching kun candidates as polyphonic', async () => {
+    setupFetchMock();
+    const service = await importFreshService();
+
+    const html = await service.convert('被らなく', { prev: '', next: '' });
+
+    expectRubyReadingsToMatch(extractRubyReadings(html), ['こうむらなく']);
+    expect(html).toContain('data-reading-tags="possible_polyphonic"');
+    expect(html).toContain('data-reading-alternatives="かぶらなく"');
+  });
+
+  it('resolves common ichidan ru-verb conjugated okurigana', async () => {
+    setupFetchMock();
+    const service = await importFreshService();
+
+    const html = await service.convert('食べなく', { prev: '', next: '' });
+
+    expectRubyReadingsToMatch(extractRubyReadings(html), ['たべなく']);
+    expect(html).not.toContain('possible_polyphonic');
+  });
+
   it.each([
     { input: '国際', expected: 'こくさい' },
     { input: '目的', expected: 'もくてき' },

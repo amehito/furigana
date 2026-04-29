@@ -8,6 +8,7 @@ export default defineConfig({
       resources: ["json/kanji-jouyou.json","json/fixed-readings.json","json/family-names.json"],
       matches: ["<all_urls>"]
     }],
+    host_permissions: ['https://cdn.jsdelivr.net/*'],
     permissions: ['tabs', 'activeTab','storage'], // activeTab 允许你在点击插件图标时获取当前页信息
     name: '日语划词注音',
     version: "1.0.0",

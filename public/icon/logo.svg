@@ -1,0 +1,8 @@
+<svg width="40" height="40" viewBox="0 0 40 40" xmlns="http://www.w3.org/2000/svg">
+  <rect x="0.5" y="0.5" width="39" height="39" rx="12" fill="#f4f8ef" stroke="#cfded4"/>
+  <text x="50%" y="50%" dominant-baseline="central" text-anchor="middle"
+        font-family="Hiragino Mincho ProN, Yu Mincho, serif"
+        font-size="34" fill="#2f5d50">
+    葉
+  </text>
+</svg>

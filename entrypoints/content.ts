@@ -39,7 +39,7 @@ type ReadingTag = 'possible_sokuon' | 'possible_polyphonic';
 
 const READING_TAG_LABELS: Record<ReadingTag, string> = {
   possible_sokuon: '促音候选',
-  possible_polyphonic: '多音风险',
+  possible_polyphonic: '多音字',
 };
 
 const TRANSLATOR_URL_BUILDERS: Record<TranslatorEngine, (text: string) => string> = {
@@ -114,11 +114,18 @@ export default defineContentScript({
       overlay.style.opacity = '1';
       overlay.style.setProperty('--oye-tooltip-font', `${settings.fontSize}px`);
       overlay.style.setProperty('--oye-tooltip-content-font', `${settings.fontSize + 4}px`);
-      overlay.style.setProperty('--oye-tooltip-bg', hexToRgba(settings.backgroundColor, settings.bgOpacity / 100));
+      const glassOpacity = Math.min(settings.bgOpacity / 100, 0.82);
+      overlay.style.setProperty('--oye-tooltip-bg', hexToRgba(settings.backgroundColor, glassOpacity));
       overlay.style.setProperty('--oye-tooltip-text', settings.textColor);
       overlay.style.setProperty('--oye-tooltip-radius', `${settings.borderRadius}px`);
       overlay.style.setProperty('--oye-tooltip-padding', `${settings.padding}px`);
-      overlay.style.setProperty('--oye-tooltip-shadow', '0 10px 25px -5px rgba(0,0,0,0.1)');
+      overlay.style.setProperty(
+        '--oye-tooltip-shadow',
+        [
+          '0 10px 28px rgba(31,43,64,0.08)',
+          'inset 0 1px 0 rgba(255,255,255,0.86)',
+        ].join(', '),
+      );
 
       let styleTag = document.getElementById(styleId) as HTMLStyleElement;
       if (!styleTag) {
@@ -135,12 +142,12 @@ export default defineContentScript({
           font-weight: ${settings.rubyWeight || 400} !important;
           line-height: 1.08 !important;
           opacity: 0.9;
-          letter-spacing: 0.01em;
+          letter-spacing: 0;
         }
         #${divName} ruby {
           ruby-align: center;
           ruby-position: over;
-          line-height: 1.95;
+          line-height: 1.82;
         }
       `;
     };
@@ -447,6 +454,48 @@ export default defineContentScript({
       return tags.map((tag) => `<span class="oye-card-badge oye-reading-tag">${READING_TAG_LABELS[tag]}</span>`).join('');
     };
 
+    const buildPolyphonicNotice = (rubyHtml: string) => {
+      const notices = extractPolyphonicNotices(rubyHtml);
+      if (!notices.length) return '';
+
+      return `
+        <div class="oye-reading-notices" aria-label="多音字候选">
+          ${notices.map(({ index, text, alternatives }) => {
+            return `
+              <div class="oye-reading-notice" data-reading-index="${index}" data-reading-text="${escapeHtml(text)}">
+                <span class="oye-reading-notice-label">其他读音</span>
+                <div class="oye-reading-options">
+                  ${alternatives.map((reading) => `
+                    <button class="oye-reading-option-btn" data-reading-index="${index}" data-reading-text="${escapeHtml(text)}" data-reading-value="${escapeHtml(reading)}" type="button">${escapeHtml(text)}「${escapeHtml(reading)}」</button>
+                  `).join('')}
+                </div>
+              </div>
+            `;
+          }).join('')}
+        </div>
+      `;
+    };
+
+    const attachPolyphonicNoticeActions = () => {
+      overlay.querySelectorAll<HTMLButtonElement>('.oye-reading-option-btn').forEach((button) => {
+        button.addEventListener('click', () => {
+          const index = Number.parseInt(button.dataset.readingIndex ?? '', 10);
+          const text = button.dataset.readingText ?? '';
+          const reading = button.dataset.readingValue ?? '';
+          if (Number.isNaN(index) || !text || !reading) return;
+
+          const ruby = overlay.querySelectorAll<HTMLElement>('ruby[data-reading-alternatives]')[index];
+          const rt = ruby?.querySelector('rt');
+          if (!rt) return;
+
+          const currentReading = rt.textContent ?? '';
+          rt.textContent = reading;
+          button.dataset.readingValue = currentReading;
+          button.textContent = `${text}「${currentReading}」`;
+        });
+      });
+    };
+
     const updatePinButtonState = () => {
       const button = overlay.querySelector<HTMLButtonElement>('.oye-pin-btn');
       if (!button) return;
@@ -520,11 +569,13 @@ export default defineContentScript({
 
     const renderTooltipWithAudio = async (text: string, context: SelectionContext) => {
       const html = await furiganaService.convert(text, context);
+      const polyphonicNotice = buildPolyphonicNotice(html);
 
       overlay.innerHTML = `
         <div class="tooltip-panel">
           ${buildCardHeader('句子', html)}
           <div class="tooltip-body content">${html}</div>
+          ${polyphonicNotice}
           <div class="tooltip-footer-actions">
             <button aria-label="翻译" class="word-card-btn icon-btn translate-btn" title="翻译" type="button">${buildButtonContent(audioIcons.translate, '')}</button>
             <button aria-label="播放音频" class="word-card-btn icon-btn audio-btn" title="播放音频" type="button">${buildButtonContent(audioIcons.play, '')}</button>
@@ -534,6 +585,7 @@ export default defineContentScript({
       `;
 
       attachOverlayChrome();
+      attachPolyphonicNoticeActions();
 
       overlay.querySelector<HTMLButtonElement>('.audio-btn')?.addEventListener('click', (event) => {
         playAudio(text, event.currentTarget as HTMLButtonElement);
@@ -558,6 +610,7 @@ export default defineContentScript({
 
     const renderWordCard = async (text: string, context: SelectionContext) => {
       const rubyHtml = await furiganaService.convert(text, context);
+      const polyphonicNotice = buildPolyphonicNotice(rubyHtml);
       const entityType = furiganaService.getEntityType(text);
       const fav = await isFavorite(text);
       const favoriteItems = await getFavorites();
@@ -578,6 +631,7 @@ export default defineContentScript({
             ${rubyHtml}
             </div>
           </div>
+          ${polyphonicNotice}
           <div class="word-card-bottom-actions">
             <button aria-label="翻译" class="word-card-btn icon-btn translate-btn" title="翻译" type="button">${buildButtonContent(audioIcons.translate, '')}</button>
             <button aria-label="${fav ? '取消收藏' : inboxFull ? '收藏已满' : '添加收藏'}" class="word-card-btn icon-btn favorite-btn ${fav ? 'is-active' : ''}" title="${fav ? '取消收藏' : inboxFull ? '收藏已满，请先清理 Inbox' : '添加收藏'}" type="button" ${inboxFull ? 'data-full="true"' : ''}>${buildButtonContent(audioIcons.favorite, '')}</button>
@@ -588,6 +642,7 @@ export default defineContentScript({
       `;
 
       attachOverlayChrome();
+      attachPolyphonicNoticeActions();
 
       overlay.querySelector<HTMLButtonElement>('.audio-btn')?.addEventListener('click', (event) => {
         playAudio(text, event.currentTarget as HTMLButtonElement);
@@ -723,8 +778,43 @@ function extractReadingTags(rubyHtml: string): ReadingTag[] {
   return [...tags];
 }
 
+function extractPolyphonicNotices(rubyHtml: string): Array<{ index: number; text: string; alternatives: string[] }> {
+  const template = document.createElement('template');
+  template.innerHTML = rubyHtml;
+
+  return [...template.content.querySelectorAll('ruby[data-reading-alternatives]')]
+    .map((ruby, index) => {
+      const alternatives = (ruby.getAttribute('data-reading-alternatives') ?? '')
+        .split('|')
+        .map((item) => item.trim())
+        .filter(Boolean);
+      if (!alternatives.length) return null;
+
+      const clone = ruby.cloneNode(true) as HTMLElement;
+      clone.querySelectorAll('rt').forEach((rt) => rt.remove());
+      const text = clone.textContent?.trim() ?? '';
+      if (!text) return null;
+
+      return {
+        index,
+        text,
+        alternatives: [...new Set(alternatives)],
+      };
+    })
+    .filter((notice): notice is { index: number; text: string; alternatives: string[] } => Boolean(notice));
+}
+
 function isReadingTag(value: string): value is ReadingTag {
   return value === 'possible_sokuon' || value === 'possible_polyphonic';
+}
+
+function escapeHtml(value: string) {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 }
 
 function setAudioButtonState(button: HTMLButtonElement | null | undefined, loading: boolean) {
