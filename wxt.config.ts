@@ -5,12 +5,14 @@ export default defineConfig({
   modules: ['@wxt-dev/module-react'],
   manifest: {
     web_accessible_resources: [{
-      resources: ["json/kanji-jouyou.json","json/fixed-readings.json","json/family-names.json"],
+      resources: ["json/kanji-jouyou.json","json/fixed-readings.json","json/family-names.json","json/mimetic-words.json"],
       matches: ["<all_urls>"]
     }],
     host_permissions: ['https://cdn.jsdelivr.net/*'],
-    permissions: ['tabs', 'activeTab','storage'], // activeTab 允许你在点击插件图标时获取当前页信息
+    permissions: ['tabs', 'activeTab','storage', 'audioCapture'], // activeTab 允许你在点击插件图标时获取当前页信息
     name: '日语划词注音',
+    short_name: '日语注音',
+    description: '网页划词显示日语读音、片假名，支持收藏、朗读与学习记忆。',
     version: "1.1.0",
   },
   runner:{

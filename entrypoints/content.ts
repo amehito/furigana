@@ -35,11 +35,12 @@ const LUCIDE_ICON_SIZE = 16;
 const LUCIDE_ICON_STROKE = 1.5;
 type SelectionContext = { prev: string; next: string };
 type ReportPayload = { word: string; reportContext: string; currentFurigana: string };
-type ReadingTag = 'possible_sokuon' | 'possible_polyphonic';
+type ReadingTag = 'possible_sokuon' | 'possible_polyphonic' | 'mimetic';
 
 const READING_TAG_LABELS: Record<ReadingTag, string> = {
   possible_sokuon: '促音候选',
   possible_polyphonic: '多音字',
+  mimetic: '拟声拟态',
 };
 
 const TRANSLATOR_URL_BUILDERS: Record<TranslatorEngine, (text: string) => string> = {
@@ -612,10 +613,13 @@ export default defineContentScript({
       const rubyHtml = await furiganaService.convert(text, context);
       const polyphonicNotice = buildPolyphonicNotice(rubyHtml);
       const entityType = furiganaService.getEntityType(text);
+      const mimeticEntry = furiganaService.getMimeticEntry(text);
       const fav = await isFavorite(text);
       const favoriteItems = await getFavorites();
       const inboxFull = !fav && favoriteItems.length >= FAVORITES_LIMIT;
-      const tagLabel = entityType === 'place'
+      const tagLabel = mimeticEntry
+        ? '拟声拟态'
+        : entityType === 'place'
         ? '地名'
         : entityType === 'person'
           ? '人名'
@@ -805,7 +809,7 @@ function extractPolyphonicNotices(rubyHtml: string): Array<{ index: number; text
 }
 
 function isReadingTag(value: string): value is ReadingTag {
-  return value === 'possible_sokuon' || value === 'possible_polyphonic';
+  return value === 'possible_sokuon' || value === 'possible_polyphonic' || value === 'mimetic';
 }
 
 function escapeHtml(value: string) {

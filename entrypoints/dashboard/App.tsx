@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   BookMarked,
   BookOpenText,
@@ -9,6 +9,7 @@ import {
   ChevronUp,
   FileText,
   GraduationCap,
+  Hash,
   Languages,
   PencilLine,
   PanelLeftClose,
@@ -23,6 +24,9 @@ import {
 import { browser } from 'wxt/browser';
 import { furiganaService } from '../../util/common';
 import { DEFAULT_EXTENSION_SETTINGS, type ExtensionSettings, type SiteAccessMode, type TranslatorEngine } from '../../types/settings';
+import basicGrammarN5 from './data/basic-grammar-n5.json';
+import basicGrammarN4 from './data/basic-grammar-n4.json';
+import basicGrammarN3 from './data/basic-grammar-n3.json';
 import {
   EXPORT_DRAFTS_STORAGE_KEY,
   EXPORT_HISTORY_STORAGE_KEY,
@@ -45,8 +49,89 @@ import {
 const ICON_PROPS = { size: 24, strokeWidth: 1.75 };
 const COMMUNITY_STRATEGY_URL = 'https://cdn.jsdelivr.net/gh/amehito/japanese-dict-patch@main/data/strategy.json';
 const SHOW_COMMUNITY_SECTION = true;
-type MenuKey = 'print' | 'favorites' | 'beginner-kana' | 'beginner-grammar' | 'site-policies' | 'community';
+const MASTERED_GRAMMAR_STORAGE_KEY = 'grammar_mastered_ids';
+const MASTERED_READING_BASICS_STORAGE_KEY = 'reading_basics_mastered_ids';
+const MASTERED_MIMETIC_STORAGE_KEY = 'mimetic_mastered_words';
+const GRAMMAR_RENDER_BATCH_SIZE = 20;
+const READING_BASICS_RENDER_BATCH_SIZE = 20;
+const MIMETIC_RENDER_BATCH_SIZE = 20;
+type BeginnerMenuKey = 'beginner-kana' | 'beginner-grammar' | 'beginner-reading-basics' | 'beginner-conjugation' | 'beginner-mimetic';
+type MenuKey = 'print' | 'favorites' | BeginnerMenuKey | 'site-policies' | 'community';
+type GrammarLevelFilter = 'all' | 'N5' | 'N4' | 'N3';
+type ReadingBasicsCategory = 'all' | 'number' | 'unit' | 'symbol';
+type KanaRowFilter = 'all' | 'あ' | 'か' | 'さ' | 'た' | 'な' | 'は' | 'ま' | 'や' | 'ら' | 'わ' | 'が' | 'ざ' | 'だ' | 'ば' | 'ぱ';
 type KanaMode = 'hiragana' | 'katakana' | 'dakuten';
+type MimeticWordEntry = {
+  reading?: string;
+  meaning: string;
+  tags?: string[];
+  example?: string;
+};
+type MimeticWordItem = MimeticWordEntry & {
+  word: string;
+  row: KanaRowFilter;
+};
+type GrammarExample = {
+  sentence: string;
+  translation: string;
+  note?: string;
+};
+type GrammarItem = {
+  id: string;
+  level: 'N5' | 'N4' | 'N3';
+  kanaIndex: string;
+  title: string;
+  patterns: string[];
+  translation: string;
+  explanation: string;
+  formation: string;
+  examples: GrammarExample[];
+  tags: string[];
+};
+type ReadingBasicsItem = {
+  id: string;
+  category: Exclude<ReadingBasicsCategory, 'all'>;
+  title: string;
+  reading: string;
+  meaning: string;
+  rule: string;
+  examples: Array<{
+    text: string;
+    reading: string;
+    note?: string;
+  }>;
+  tags: string[];
+};
+const GRAMMAR_LEVEL_FILTERS: Array<{ key: GrammarLevelFilter; label: string }> = [
+  { key: 'all', label: '全部' },
+  { key: 'N5', label: 'N5' },
+  { key: 'N4', label: 'N4' },
+  { key: 'N3', label: 'N3' },
+];
+const READING_BASICS_CATEGORY_FILTERS: Array<{ key: ReadingBasicsCategory; label: string }> = [
+  { key: 'all', label: '全部' },
+  { key: 'number', label: '数字' },
+  { key: 'unit', label: '单位' },
+  { key: 'symbol', label: '符号' },
+];
+const KANA_ROW_FILTERS: Array<{ key: KanaRowFilter; label: string; kana: string }> = [
+  { key: 'all', label: '全部', kana: 'すべて' },
+  { key: 'あ', label: 'あ行', kana: 'あいうえお' },
+  { key: 'か', label: 'か行', kana: 'かきくけこ' },
+  { key: 'さ', label: 'さ行', kana: 'さしすせそ' },
+  { key: 'た', label: 'た行', kana: 'たちつてと' },
+  { key: 'な', label: 'な行', kana: 'なにぬねの' },
+  { key: 'は', label: 'は行', kana: 'はひふへほ' },
+  { key: 'ま', label: 'ま行', kana: 'まみむめも' },
+  { key: 'や', label: 'や行', kana: 'やゆよ' },
+  { key: 'ら', label: 'ら行', kana: 'らりるれろ' },
+  { key: 'わ', label: 'わ行', kana: 'わをん' },
+  { key: 'が', label: 'が行', kana: 'がぎぐげご' },
+  { key: 'ざ', label: 'ざ行', kana: 'ざじずぜぞ' },
+  { key: 'だ', label: 'だ行', kana: 'だぢづでど' },
+  { key: 'ば', label: 'ば行', kana: 'ばびぶべぼ' },
+  { key: 'ぱ', label: 'ぱ行', kana: 'ぱぴぷぺぽ' },
+];
 const FULL_LOAD_MESSAGE = '警告：认知负荷已达上限！不消灭这些“死角”，新知识将无法进入。';
 
 const TRANSLATOR_URL_BUILDERS: Record<TranslatorEngine, (text: string) => string> = {
@@ -98,41 +183,838 @@ const KANA_TABLES: Record<KanaMode, Array<{ label: string; kana: Array<string | 
   ],
 };
 const BASIC_GRAMMAR_SECTIONS = [
+  ...basicGrammarN5.items,
+  ...basicGrammarN4.items,
+  ...basicGrammarN3.items,
+] as GrammarItem[];
+const grammarExampleRubyCache = new Map<string, string>();
+
+const BEGINNER_MENU_ITEMS: Array<{
+  key: BeginnerMenuKey;
+  label: string;
+  icon: typeof BookOpenText;
+}> = [
+  { key: 'beginner-kana', label: '五十音图', icon: BookOpenText },
+  { key: 'beginner-grammar', label: '基础语法', icon: PencilLine },
+  { key: 'beginner-reading-basics', label: '数字单位符号', icon: Hash },
+  { key: 'beginner-conjugation', label: '日语变形', icon: RefreshCw },
+  { key: 'beginner-mimetic', label: '擬態語', icon: Languages },
+];
+
+const READING_BASICS_ITEMS: ReadingBasicsItem[] = [
   {
-    title: 'です / ます：礼貌句的骨架',
-    pattern: '名词 + です / 动词ます形',
-    examples: ['学生です。', '日本語を勉強します。'],
-    note: 'です用于说明“是什么/怎么样”，ます用于礼貌地表达动作。',
+    id: 'number-0',
+    category: 'number',
+    title: '0 / 零',
+    reading: 'ゼロ / れい',
+    meaning: '数字 0',
+    rule: '日常读ゼロ很常见；电话号码、编号里也常用れい。',
+    examples: [
+      { text: '0点', reading: 'れい てん', note: '分数、比分、温度可用れい' },
+      { text: 'ゼロから始める', reading: 'ゼロから はじめる' },
+    ],
+    tags: ['基数', '编号'],
   },
   {
-    title: 'は / が：主题和焦点',
-    pattern: 'A は ... / A が ...',
-    examples: ['私は学生です。', '雨が降っています。'],
-    note: 'は把话题端出来，が更像把重点打在主语本身或新信息上。',
+    id: 'number-1',
+    category: 'number',
+    title: '1 / 一',
+    reading: 'いち / ひと',
+    meaning: '数字 1',
+    rule: '单独数数多读いち；和日语固有量词搭配时常变成ひと。',
+    examples: [
+      { text: '一つ', reading: 'ひとつ' },
+      { text: '一人', reading: 'ひとり' },
+    ],
+    tags: ['基数', '固有读法'],
   },
   {
-    title: 'を / に / で：动作的线索',
-    pattern: '对象 を / 方向或时间 に / 场所或手段 で',
-    examples: ['本を読みます。', '学校に行きます。', '駅で会います。'],
-    note: '先抓住“动作作用到谁、去向哪里、在哪里发生”，句子会清楚很多。',
+    id: 'number-2',
+    category: 'number',
+    title: '2 / 二',
+    reading: 'に / ふた',
+    meaning: '数字 2',
+    rule: '普通数字读に；二つ、二人等固定表达用ふた系读法。',
+    examples: [
+      { text: '二つ', reading: 'ふたつ' },
+      { text: '二人', reading: 'ふたり' },
+    ],
+    tags: ['基数', '固有读法'],
   },
   {
-    title: '形容词：い形容词与な形容词',
-    pattern: '高いです / 静かです / 静かな町',
-    examples: ['この本は面白いです。', 'ここは静かです。'],
-    note: 'い形容词直接接名词，な形容词修饰名词时要加な。',
+    id: 'number-3',
+    category: 'number',
+    title: '3 / 三',
+    reading: 'さん / みっ',
+    meaning: '数字 3',
+    rule: '三通常读さん；三つ、三日等词里会出现みっ/みっか。',
+    examples: [
+      { text: '三つ', reading: 'みっつ' },
+      { text: '三日', reading: 'みっか' },
+    ],
+    tags: ['基数', '日期'],
   },
   {
-    title: '否定和过去',
-    pattern: 'ではありません / ません / ました / ませんでした',
-    examples: ['学生ではありません。', '昨日、勉強しました。'],
-    note: '先从礼貌形入手，比一开始硬背所有普通形变化更稳。',
+    id: 'number-4',
+    category: 'number',
+    title: '4 / 四',
+    reading: 'よん / し / よ',
+    meaning: '数字 4',
+    rule: '计数常用よん；月份读しがつ；四つ、四日用よ系。',
+    examples: [
+      { text: '四月', reading: 'しがつ' },
+      { text: '四つ', reading: 'よっつ' },
+    ],
+    tags: ['多读音', '日期'],
   },
   {
-    title: '疑问句：か',
-    pattern: '句子 + か',
-    examples: ['これは何ですか。', '明日行きますか。'],
-    note: '日语疑问句常在句尾加か，语序通常不用像中文或英文那样大幅改动。',
+    id: 'number-5',
+    category: 'number',
+    title: '5 / 五',
+    reading: 'ご / いつ',
+    meaning: '数字 5',
+    rule: '普通数字读ご；五つ、五日等固定表达用いつ。',
+    examples: [
+      { text: '五つ', reading: 'いつつ' },
+      { text: '五日', reading: 'いつか' },
+    ],
+    tags: ['基数', '日期'],
+  },
+  {
+    id: 'number-6',
+    category: 'number',
+    title: '6 / 六',
+    reading: 'ろく / むっ',
+    meaning: '数字 6',
+    rule: '后接か、さ、た、は行量词时常促音化成ろっ。',
+    examples: [
+      { text: '六回', reading: 'ろっかい' },
+      { text: '六本', reading: 'ろっぽん' },
+    ],
+    tags: ['促音', '数字变音'],
+  },
+  {
+    id: 'number-7',
+    category: 'number',
+    title: '7 / 七',
+    reading: 'なな / しち',
+    meaning: '数字 7',
+    rule: '单独计数多用なな；七月、七時常读しち。',
+    examples: [
+      { text: '七月', reading: 'しちがつ' },
+      { text: '七つ', reading: 'ななつ' },
+    ],
+    tags: ['多读音', '时间'],
+  },
+  {
+    id: 'number-8',
+    category: 'number',
+    title: '8 / 八',
+    reading: 'はち / やっ',
+    meaning: '数字 8',
+    rule: '接か、さ、た、は行量词时常促音化成はっ；固有读法常见やっ。',
+    examples: [
+      { text: '八回', reading: 'はっかい' },
+      { text: '八つ', reading: 'やっつ' },
+    ],
+    tags: ['促音', '固有读法'],
+  },
+  {
+    id: 'number-9',
+    category: 'number',
+    title: '9 / 九',
+    reading: 'きゅう / く',
+    meaning: '数字 9',
+    rule: '普通计数多用きゅう；九月、九時常读く。',
+    examples: [
+      { text: '九月', reading: 'くがつ' },
+      { text: '九つ', reading: 'ここのつ' },
+    ],
+    tags: ['多读音', '时间'],
+  },
+  {
+    id: 'number-10',
+    category: 'number',
+    title: '10 / 十',
+    reading: 'じゅう / とお',
+    meaning: '数字 10',
+    rule: '接か、さ、た、は行量词时常变成じゅっ；十日读とおか。',
+    examples: [
+      { text: '十回', reading: 'じゅっかい' },
+      { text: '十日', reading: 'とおか' },
+    ],
+    tags: ['促音', '日期'],
+  },
+  {
+    id: 'number-large',
+    category: 'number',
+    title: '100〜10000',
+    reading: 'ひゃく・せん・まん',
+    meaning: '百、千、万的常用读法',
+    rule: '百位里300、600、800会变音；千位里3000、8000要特别记；10000读いちまん。',
+    examples: [
+      { text: '100', reading: 'ひゃく' },
+      { text: '200', reading: 'にひゃく' },
+      { text: '三百', reading: 'さんびゃく' },
+      { text: '400', reading: 'よんひゃく' },
+      { text: '500', reading: 'ごひゃく' },
+      { text: '600', reading: 'ろっぴゃく' },
+      { text: '700', reading: 'ななひゃく' },
+      { text: '800', reading: 'はっぴゃく' },
+      { text: '900', reading: 'きゅうひゃく' },
+      { text: '1000', reading: 'せん' },
+      { text: '3000', reading: 'さんぜん' },
+      { text: '八千', reading: 'はっせん' },
+      { text: '10000', reading: 'いちまん' },
+    ],
+    tags: ['大数字', '浊音'],
+  },
+  {
+    id: 'number-decimal',
+    category: 'number',
+    title: '小数・百分比',
+    reading: 'てん / パーセント',
+    meaning: '小数点和百分比',
+    rule: '小数点读てん；百分号读パーセント，数字逐位或按数值读。',
+    examples: [
+      { text: '3.5', reading: 'さん てん ご' },
+      { text: '20%', reading: 'にじゅっ パーセント' },
+    ],
+    tags: ['小数', '百分比'],
+  },
+  {
+    id: 'unit-ko',
+    category: 'unit',
+    title: '個 / 个',
+    reading: 'こ',
+    meaning: '通用小物件单位',
+    rule: '1、6、8、10 后面常促音化：いっこ、ろっこ、はっこ、じゅっこ。',
+    examples: [
+      { text: '一個', reading: 'いっこ' },
+      { text: '三個', reading: 'さんこ' },
+    ],
+    tags: ['量词', '促音'],
+  },
+  {
+    id: 'unit-hon',
+    category: 'unit',
+    title: '本',
+    reading: 'ほん / ぼん / ぽん',
+    meaning: '细长物、线路、电影等',
+    rule: '1、6、8、10 多读ぽん；3读ぼん；其他多读ほん。',
+    examples: [
+      { text: '一本', reading: 'いっぽん' },
+      { text: '三本', reading: 'さんぼん' },
+    ],
+    tags: ['量词', 'は行变音'],
+  },
+  {
+    id: 'unit-hiki',
+    category: 'unit',
+    title: '匹',
+    reading: 'ひき / びき / ぴき',
+    meaning: '小动物单位',
+    rule: '1、6、8、10 多读ぴき；3读びき；其他多读ひき。',
+    examples: [
+      { text: '一匹', reading: 'いっぴき' },
+      { text: '三匹', reading: 'さんびき' },
+    ],
+    tags: ['量词', 'は行变音'],
+  },
+  {
+    id: 'unit-fun',
+    category: 'unit',
+    title: '分',
+    reading: 'ふん / ぷん',
+    meaning: '分钟',
+    rule: '1、3、4、6、8、10 分常读ぷん，其他多读ふん。',
+    examples: [
+      { text: '一分', reading: 'いっぷん' },
+      { text: '五分', reading: 'ごふん' },
+    ],
+    tags: ['时间', 'は行变音'],
+  },
+  {
+    id: 'unit-kai-count',
+    category: 'unit',
+    title: '回',
+    reading: 'かい',
+    meaning: '次数',
+    rule: '前面是促音数字时读起来变成いっかい、ろっかい、はっかい、じゅっかい。',
+    examples: [
+      { text: '一回', reading: 'いっかい' },
+      { text: '三回', reading: 'さんかい' },
+    ],
+    tags: ['次数', '促音'],
+  },
+  {
+    id: 'unit-kai-floor',
+    category: 'unit',
+    title: '階',
+    reading: 'かい / がい',
+    meaning: '楼层',
+    rule: '三階读さんがい是常见例外；一階、六階、八階等有促音。',
+    examples: [
+      { text: '一階', reading: 'いっかい' },
+      { text: '三階', reading: 'さんがい' },
+    ],
+    tags: ['楼层', '例外'],
+  },
+  {
+    id: 'unit-nin',
+    category: 'unit',
+    title: '人',
+    reading: 'にん / り',
+    meaning: '人数',
+    rule: '一人、二人是特殊读法；三人以后通常数字 + にん。',
+    examples: [
+      { text: '一人', reading: 'ひとり' },
+      { text: '四人', reading: 'よにん' },
+    ],
+    tags: ['人数', '特殊读法'],
+  },
+  {
+    id: 'unit-mai',
+    category: 'unit',
+    title: '枚',
+    reading: 'まい',
+    meaning: '薄片、纸张、票据',
+    rule: '读音相对稳定，数字直接接まい。',
+    examples: [
+      { text: '一枚', reading: 'いちまい' },
+      { text: '何枚', reading: 'なんまい' },
+    ],
+    tags: ['量词', '稳定读法'],
+  },
+  {
+    id: 'unit-satsu',
+    category: 'unit',
+    title: '冊',
+    reading: 'さつ',
+    meaning: '书本单位',
+    rule: '1、8、10 常促音化；三冊不浊化，读さんさつ。',
+    examples: [
+      { text: '一冊', reading: 'いっさつ' },
+      { text: '八冊', reading: 'はっさつ' },
+    ],
+    tags: ['书本', '促音'],
+  },
+  {
+    id: 'unit-dai',
+    category: 'unit',
+    title: '台',
+    reading: 'だい',
+    meaning: '机器、车辆单位',
+    rule: '读音稳定，数字直接接だい。',
+    examples: [
+      { text: '二台', reading: 'にだい' },
+      { text: '何台', reading: 'なんだい' },
+    ],
+    tags: ['机器', '车辆'],
+  },
+  {
+    id: 'unit-en',
+    category: 'unit',
+    title: '円',
+    reading: 'えん',
+    meaning: '日元',
+    rule: '金额里的四常读よん，七常读なな，避免听混。',
+    examples: [
+      { text: '四百円', reading: 'よんひゃくえん' },
+      { text: '七千円', reading: 'ななせんえん' },
+    ],
+    tags: ['金额', '数字选择'],
+  },
+  {
+    id: 'unit-date',
+    category: 'unit',
+    title: '日付 1〜10日',
+    reading: 'にち / か',
+    meaning: '1号到10号的日期读法',
+    rule: '日期读法和普通数字差别很大，1号到10号建议整组记。',
+    examples: [
+      { text: '1日', reading: 'ついたち' },
+      { text: '2日', reading: 'ふつか' },
+      { text: '3日', reading: 'みっか' },
+      { text: '4日', reading: 'よっか' },
+      { text: '5日', reading: 'いつか' },
+      { text: '6日', reading: 'むいか' },
+      { text: '7日', reading: 'なのか' },
+      { text: '8日', reading: 'ようか' },
+      { text: '9日', reading: 'ここのか' },
+      { text: '10日', reading: 'とおか' },
+    ],
+    tags: ['日期', '特殊读法'],
+  },
+  {
+    id: 'unit-date-11-20',
+    category: 'unit',
+    title: '日付 11〜20日',
+    reading: 'にち / か',
+    meaning: '11号到20号的日期读法',
+    rule: '11日以后多为数字 + にち，但14日、20日仍是特殊读法。',
+    examples: [
+      { text: '11日', reading: 'じゅういちにち' },
+      { text: '12日', reading: 'じゅうににち' },
+      { text: '13日', reading: 'じゅうさんにち' },
+      { text: '14日', reading: 'じゅうよっか' },
+      { text: '15日', reading: 'じゅうごにち' },
+      { text: '16日', reading: 'じゅうろくにち' },
+      { text: '17日', reading: 'じゅうしちにち' },
+      { text: '18日', reading: 'じゅうはちにち' },
+      { text: '19日', reading: 'じゅうくにち' },
+      { text: '20日', reading: 'はつか' },
+    ],
+    tags: ['日期', '特殊读法'],
+  },
+  {
+    id: 'unit-date-21-31',
+    category: 'unit',
+    title: '日付 21〜31日',
+    reading: 'にち / か',
+    meaning: '21号到31号的日期读法',
+    rule: '21日以后基本读数字 + にち；24日读にじゅうよっか，31日读さんじゅういちにち。',
+    examples: [
+      { text: '21日', reading: 'にじゅういちにち' },
+      { text: '22日', reading: 'にじゅうににち' },
+      { text: '23日', reading: 'にじゅうさんにち' },
+      { text: '24日', reading: 'にじゅうよっか' },
+      { text: '25日', reading: 'にじゅうごにち' },
+      { text: '26日', reading: 'にじゅうろくにち' },
+      { text: '27日', reading: 'にじゅうしちにち' },
+      { text: '28日', reading: 'にじゅうはちにち' },
+      { text: '29日', reading: 'にじゅうくにち' },
+      { text: '30日', reading: 'さんじゅうにち' },
+      { text: '31日', reading: 'さんじゅういちにち' },
+    ],
+    tags: ['日期', '31号'],
+  },
+  {
+    id: 'unit-months',
+    category: 'unit',
+    title: '月 1〜12月',
+    reading: 'がつ',
+    meaning: '12个月份',
+    rule: '月份基本是数字 + がつ；4月、7月、9月分别读しがつ、しちがつ、くがつ。',
+    examples: [
+      { text: '1月', reading: 'いちがつ' },
+      { text: '2月', reading: 'にがつ' },
+      { text: '3月', reading: 'さんがつ' },
+      { text: '4月', reading: 'しがつ' },
+      { text: '5月', reading: 'ごがつ' },
+      { text: '6月', reading: 'ろくがつ' },
+      { text: '7月', reading: 'しちがつ' },
+      { text: '8月', reading: 'はちがつ' },
+      { text: '9月', reading: 'くがつ' },
+      { text: '10月', reading: 'じゅうがつ' },
+      { text: '11月', reading: 'じゅういちがつ' },
+      { text: '12月', reading: 'じゅうにがつ' },
+    ],
+    tags: ['月份', '时间'],
+  },
+  {
+    id: 'unit-sai',
+    category: 'unit',
+    title: '歳 / 才',
+    reading: 'さい',
+    meaning: '年龄',
+    rule: '1、8、10、20岁有特殊或促音读法；20歳常读はたち。',
+    examples: [
+      { text: '一歳', reading: 'いっさい' },
+      { text: '二十歳', reading: 'はたち' },
+    ],
+    tags: ['年龄', '促音'],
+  },
+  {
+    id: 'unit-ji',
+    category: 'unit',
+    title: '時',
+    reading: 'じ',
+    meaning: '几点钟',
+    rule: '4点读よじ，7点读しちじ，9点读くじ。',
+    examples: [
+      { text: '四時', reading: 'よじ' },
+      { text: '九時', reading: 'くじ' },
+    ],
+    tags: ['时间', '特殊读法'],
+  },
+  {
+    id: 'unit-jikan',
+    category: 'unit',
+    title: '時間',
+    reading: 'じかん',
+    meaning: '小时、时长',
+    rule: '表示持续时间时用じかん；4小时常读よじかん。',
+    examples: [
+      { text: '一時間', reading: 'いちじかん' },
+      { text: '四時間', reading: 'よじかん' },
+    ],
+    tags: ['时间', '时长'],
+  },
+  {
+    id: 'unit-nen',
+    category: 'unit',
+    title: '年',
+    reading: 'ねん',
+    meaning: '年份、年数',
+    rule: '年份多读数字 + ねん；4年读よねん，7年读ななねん较常见。',
+    examples: [
+      { text: '一年', reading: 'いちねん' },
+      { text: '四年', reading: 'よねん' },
+    ],
+    tags: ['年份', '时间'],
+  },
+  {
+    id: 'unit-hai',
+    category: 'unit',
+    title: '杯',
+    reading: 'はい / ばい / ぱい',
+    meaning: '杯、碗、容器份数',
+    rule: '1、6、8、10多读ぱい；3读ばい；其他多读はい。',
+    examples: [
+      { text: '一杯', reading: 'いっぱい' },
+      { text: '三杯', reading: 'さんばい' },
+    ],
+    tags: ['量词', 'は行变音'],
+  },
+  {
+    id: 'unit-chaku',
+    category: 'unit',
+    title: '着',
+    reading: 'ちゃく',
+    meaning: '衣服套数',
+    rule: '1、8、10常促音化：いっちゃく、はっちゃく、じゅっちゃく。',
+    examples: [
+      { text: '一着', reading: 'いっちゃく' },
+      { text: '三着', reading: 'さんちゃく' },
+    ],
+    tags: ['衣服', '促音'],
+  },
+  {
+    id: 'unit-soku',
+    category: 'unit',
+    title: '足',
+    reading: 'そく / ぞく',
+    meaning: '鞋、袜子的双数',
+    rule: '1、8、10常促音化；3足常读さんぞく。',
+    examples: [
+      { text: '一足', reading: 'いっそく' },
+      { text: '三足', reading: 'さんぞく' },
+    ],
+    tags: ['鞋袜', '浊音'],
+  },
+  {
+    id: 'unit-ken',
+    category: 'unit',
+    title: '件',
+    reading: 'けん',
+    meaning: '事情、案件、邮件条数',
+    rule: '读音较稳定，数字直接接けん。',
+    examples: [
+      { text: '一件', reading: 'いっけん' },
+      { text: '三件', reading: 'さんけん' },
+    ],
+    tags: ['事项', '促音'],
+  },
+  {
+    id: 'unit-ban',
+    category: 'unit',
+    title: '番',
+    reading: 'ばん',
+    meaning: '顺序、号码',
+    rule: '常用于第几号、第几位、几号窗口，读音稳定。',
+    examples: [
+      { text: '一番', reading: 'いちばん' },
+      { text: '三番', reading: 'さんばん' },
+    ],
+    tags: ['顺序', '号码'],
+  },
+  {
+    id: 'unit-tsu',
+    category: 'unit',
+    title: 'つ',
+    reading: 'ひとつ・ふたつ',
+    meaning: '日语固有数法的通用量词',
+    rule: '1到10多用固有读法，适合数抽象事物和不确定的小物件。',
+    examples: [
+      { text: '一つ', reading: 'ひとつ' },
+      { text: '九つ', reading: 'ここのつ' },
+    ],
+    tags: ['量词', '固有读法'],
+  },
+  {
+    id: 'unit-tou',
+    category: 'unit',
+    title: '頭',
+    reading: 'とう',
+    meaning: '大型动物单位',
+    rule: '读音较稳定，常用于牛、马、象等大型动物。',
+    examples: [
+      { text: '一頭', reading: 'いっとう' },
+      { text: '三頭', reading: 'さんとう' },
+    ],
+    tags: ['动物', '促音'],
+  },
+  {
+    id: 'unit-wa',
+    category: 'unit',
+    title: '羽',
+    reading: 'わ / ば / ぱ',
+    meaning: '鸟、兔子的单位',
+    rule: '1羽可读いちわ或いっぱ；3羽常读さんば，读法会随习惯变化。',
+    examples: [
+      { text: '一羽', reading: 'いちわ / いっぱ' },
+      { text: '三羽', reading: 'さんば' },
+    ],
+    tags: ['动物', 'は行变音'],
+  },
+  {
+    id: 'unit-sara',
+    category: 'unit',
+    title: '皿',
+    reading: 'さら',
+    meaning: '盘装料理',
+    rule: '读音稳定，用来数一盘一盘的菜。',
+    examples: [
+      { text: '一皿', reading: 'ひとさら' },
+      { text: '二皿', reading: 'ふたさら' },
+    ],
+    tags: ['料理', '量词'],
+  },
+  {
+    id: 'unit-mei',
+    category: 'unit',
+    title: '名',
+    reading: 'めい',
+    meaning: '礼貌的人数单位',
+    rule: '比人更正式，餐厅预约、接待场景常用。',
+    examples: [
+      { text: '一名', reading: 'いちめい' },
+      { text: '三名様', reading: 'さんめいさま' },
+    ],
+    tags: ['人数', '礼貌'],
+  },
+  {
+    id: 'symbol-comma',
+    category: 'symbol',
+    title: '、',
+    reading: '読点（とうてん）',
+    meaning: '日文逗号',
+    rule: '朗读时通常只是短暂停顿；说符号名称时读とうてん。',
+    examples: [
+      { text: '朝、学校へ行く。', reading: 'あさ、がっこうへ いく' },
+      { text: '読点', reading: 'とうてん' },
+    ],
+    tags: ['标点', '停顿'],
+  },
+  {
+    id: 'symbol-period',
+    category: 'symbol',
+    title: '。',
+    reading: '句点（くてん）',
+    meaning: '日文句号',
+    rule: '句末停顿；说符号名称时读くてん。',
+    examples: [
+      { text: '終わりました。', reading: 'おわりました' },
+      { text: '句点', reading: 'くてん' },
+    ],
+    tags: ['标点', '句末'],
+  },
+  {
+    id: 'symbol-question',
+    category: 'symbol',
+    title: '？ / ?',
+    reading: '疑問符（ぎもんふ）',
+    meaning: '问号',
+    rule: '日语正式书写常用か表达疑问；聊天和标题中常见问号。',
+    examples: [
+      { text: '本当ですか？', reading: 'ほんとうですか' },
+      { text: '疑問符', reading: 'ぎもんふ' },
+    ],
+    tags: ['标点', '疑问'],
+  },
+  {
+    id: 'symbol-exclamation',
+    category: 'symbol',
+    title: '！ / !',
+    reading: '感嘆符（かんたんふ）',
+    meaning: '感叹号',
+    rule: '用于强调情绪；符号名称读かんたんふ，也常说びっくりマーク。',
+    examples: [
+      { text: 'すごい！', reading: 'すごい' },
+      { text: 'びっくりマーク', reading: 'びっくりマーク' },
+    ],
+    tags: ['标点', '强调'],
+  },
+  {
+    id: 'symbol-dot',
+    category: 'symbol',
+    title: '・',
+    reading: '中黒（なかぐろ）',
+    meaning: '中点',
+    rule: '常用于外来语并列、姓名分隔；朗读正文时多按词组自然停顿。',
+    examples: [
+      { text: 'コーヒー・紅茶', reading: 'コーヒー、こうちゃ' },
+      { text: '中黒', reading: 'なかぐろ' },
+    ],
+    tags: ['标点', '外来语'],
+  },
+  {
+    id: 'symbol-long-vowel',
+    category: 'symbol',
+    title: 'ー',
+    reading: '長音符（ちょうおんぷ）',
+    meaning: '长音符',
+    rule: '片假名里表示前一个音拉长，不单独读成一个音。',
+    examples: [
+      { text: 'コーヒー', reading: 'コーヒー' },
+      { text: 'メール', reading: 'メール' },
+    ],
+    tags: ['假名', '长音'],
+  },
+  {
+    id: 'symbol-quote',
+    category: 'symbol',
+    title: '「 」',
+    reading: '鉤括弧（かぎかっこ）',
+    meaning: '日文引号',
+    rule: '用于引用或强调；朗读时通常不读符号名称。',
+    examples: [
+      { text: '「はい」と答える', reading: 'はい と こたえる' },
+      { text: '鉤括弧', reading: 'かぎかっこ' },
+    ],
+    tags: ['标点', '引用'],
+  },
+  {
+    id: 'symbol-parentheses',
+    category: 'symbol',
+    title: '（ ）',
+    reading: '丸括弧（まるかっこ）',
+    meaning: '圆括号',
+    rule: '补充说明用；需要读出符号时说まるかっこ。',
+    examples: [
+      { text: '東京（日本）', reading: 'とうきょう、にほん' },
+      { text: '丸括弧', reading: 'まるかっこ' },
+    ],
+    tags: ['标点', '补充'],
+  },
+  {
+    id: 'symbol-slash',
+    category: 'symbol',
+    title: '／ /',
+    reading: 'スラッシュ',
+    meaning: '斜线',
+    rule: '网址、日期、选项分隔中常见，通常读スラッシュ。',
+    examples: [
+      { text: '5/2', reading: 'ご スラッシュ に' },
+      { text: 'A/B', reading: 'エー スラッシュ ビー' },
+    ],
+    tags: ['符号', '分隔'],
+  },
+  {
+    id: 'symbol-colon',
+    category: 'symbol',
+    title: '： / :',
+    reading: 'コロン',
+    meaning: '冒号',
+    rule: '时间、说明、比例里常见；时间表达也可直接读数字和分。',
+    examples: [
+      { text: '10:30', reading: 'じゅうじ さんじゅっぷん' },
+      { text: 'コロン', reading: 'コロン' },
+    ],
+    tags: ['符号', '时间'],
+  },
+];
+
+const CONJUGATION_RULES = [
+  {
+    title: '先判断词类',
+    description: '动词分为五段动词、一段动词、する/来る不规则动词；形容词分为い形容词和な形容词。变形前先确认词类，后面的规则才不会乱。',
+    points: ['五段：書く、話す、読む、買う', '一段：食べる、見る、起きる', '不规则：する、来る'],
+  },
+  {
+    title: 'ます形是礼貌入口',
+    description: 'ます形适合日常礼貌表达，也常作为连接其他语法的基础。五段动词把词尾变到い段再加ます，一段动词去る加ます。',
+    points: ['書く -> 書きます', '読む -> 読みます', '食べる -> 食べます', 'する -> します'],
+  },
+  {
+    title: 'て形连接动作和请求',
+    description: 'て形用于“做完后、正在做、请做”等表达。五段动词会按词尾发生音便，是入门阶段最值得集中记的一组。',
+    points: ['書く -> 書いて', '読む -> 読んで', '待つ -> 待って', '食べる -> 食べて'],
+  },
+  {
+    title: 'ない形表达否定',
+    description: '五段动词把词尾变到あ段加ない，う结尾变わない；一段动词去る加ない。不规则动词需要单独记。',
+    points: ['書く -> 書かない', '買う -> 買わない', '見る -> 見ない', '来る -> 来ない'],
+  },
+  {
+    title: 'た形表示过去或完成',
+    description: 'た形和て形的变化路线几乎一样，只是把て/で换成た/だ。记住て形以后，た形会轻松很多。',
+    points: ['書いて -> 書いた', '読んで -> 読んだ', '待って -> 待った', '食べて -> 食べた'],
+  },
+  {
+    title: '形容词也会变形',
+    description: 'い形容词直接改词尾，な形容词更像名词，常借助です/だ来表达时态和否定。',
+    points: ['高い -> 高くない -> 高かった', '静かだ -> 静かではない -> 静かだった'],
+  },
+];
+
+const CONJUGATION_EXAMPLES = [
+  {
+    label: '礼貌现在',
+    base: '書く',
+    forms: ['書きます', '書きません'],
+    sentence: '毎日、日記を書きます。',
+    translation: '我每天写日记。',
+  },
+  {
+    label: 'て形请求',
+    base: '待つ',
+    forms: ['待って', '待ってください'],
+    sentence: 'ここで少し待ってください。',
+    translation: '请在这里稍等一下。',
+  },
+  {
+    label: '否定',
+    base: '飲む',
+    forms: ['飲まない', '飲みません'],
+    sentence: '今日はコーヒーを飲みません。',
+    translation: '今天不喝咖啡。',
+  },
+  {
+    label: '过去完成',
+    base: '食べる',
+    forms: ['食べた', '食べました'],
+    sentence: '朝ご飯を食べました。',
+    translation: '吃过早饭了。',
+  },
+  {
+    label: '可能形',
+    base: '話す',
+    forms: ['話せる', '話せます'],
+    sentence: '少し日本語が話せます。',
+    translation: '会说一点日语。',
+  },
+  {
+    label: '意向形',
+    base: '行く',
+    forms: ['行こう', '行きましょう'],
+    sentence: '週末、一緒に映画を見に行きましょう。',
+    translation: '周末一起去看电影吧。',
+  },
+  {
+    label: 'い形容词否定',
+    base: '難しい',
+    forms: ['難しくない', '難しくありません'],
+    sentence: 'この問題はあまり難しくありません。',
+    translation: '这道题不太难。',
+  },
+  {
+    label: 'な形容词过去',
+    base: '静か',
+    forms: ['静かだった', '静かでした'],
+    sentence: '昨日の図書館はとても静かでした。',
+    translation: '昨天的图书馆很安静。',
   },
 ];
 
@@ -550,6 +1432,18 @@ function App() {
       return <BasicGrammarPanel />;
     }
 
+    if (activeMenu === 'beginner-reading-basics') {
+      return <ReadingBasicsPanel />;
+    }
+
+    if (activeMenu === 'beginner-conjugation') {
+      return <ConjugationLearningPanel />;
+    }
+
+    if (activeMenu === 'beginner-mimetic') {
+      return <MimeticLearningPanel />;
+    }
+
     if (activeMenu === 'community') {
       return (
         <section className="workspace-panel workspace-panel--community">
@@ -834,22 +1728,21 @@ function App() {
               <ChevronDown className="workspace-nav__chevron" size={18} strokeWidth={1.8} />
             </button>
             <div className="workspace-nav__submenu">
-              <button
-                className={`workspace-nav__subitem ${activeMenu === 'beginner-kana' ? 'is-active' : ''}`}
-                onClick={() => setActiveMenu('beginner-kana')}
-                type="button"
-              >
-                <BookOpenText size={18} strokeWidth={1.8} />
-                <span>五十音图</span>
-              </button>
-              <button
-                className={`workspace-nav__subitem ${activeMenu === 'beginner-grammar' ? 'is-active' : ''}`}
-                onClick={() => setActiveMenu('beginner-grammar')}
-                type="button"
-              >
-                <PencilLine size={18} strokeWidth={1.8} />
-                <span>基础语法</span>
-              </button>
+              {BEGINNER_MENU_ITEMS.map((item) => {
+                const Icon = item.icon;
+
+                return (
+                  <button
+                    className={`workspace-nav__subitem ${activeMenu === item.key ? 'is-active' : ''}`}
+                    key={item.key}
+                    onClick={() => setActiveMenu(item.key)}
+                    type="button"
+                  >
+                    <Icon size={18} strokeWidth={1.8} />
+                    <span>{item.label}</span>
+                  </button>
+                );
+              })}
             </div>
           </div>
           <button
@@ -918,6 +1811,15 @@ function getInitialMenu(): MenuKey {
   if (section === 'beginner-grammar') {
     return 'beginner-grammar';
   }
+  if (section === 'beginner-reading-basics') {
+    return 'beginner-reading-basics';
+  }
+  if (section === 'beginner-conjugation') {
+    return 'beginner-conjugation';
+  }
+  if (section === 'beginner-mimetic') {
+    return 'beginner-mimetic';
+  }
   if (SHOW_COMMUNITY_SECTION && section === 'community') {
     return 'community';
   }
@@ -929,7 +1831,420 @@ function getFirstKana(mode: KanaMode) {
   return KANA_TABLES[mode].flatMap((row) => row.kana).find((kana): kana is string => Boolean(kana)) ?? 'あ';
 }
 
+function parseStoredGrammarIds() {
+  return new Set(
+    (window.localStorage.getItem(MASTERED_GRAMMAR_STORAGE_KEY) ?? '')
+      .split(',')
+      .map((id) => id.trim())
+      .filter(Boolean),
+  );
+}
+
+function persistGrammarIds(ids: Set<string>) {
+  window.localStorage.setItem(MASTERED_GRAMMAR_STORAGE_KEY, Array.from(ids).join(','));
+}
+
+function isGrammarMastered(id: string) {
+  return parseStoredGrammarIds().has(id);
+}
+
+function parseStoredReadingBasicsIds() {
+  return new Set(
+    (window.localStorage.getItem(MASTERED_READING_BASICS_STORAGE_KEY) ?? '')
+      .split(',')
+      .map((id) => id.trim())
+      .filter(Boolean),
+  );
+}
+
+function persistReadingBasicsIds(ids: Set<string>) {
+  window.localStorage.setItem(MASTERED_READING_BASICS_STORAGE_KEY, Array.from(ids).join(','));
+}
+
+function parseStoredMimeticWords() {
+  return new Set(
+    (window.localStorage.getItem(MASTERED_MIMETIC_STORAGE_KEY) ?? '')
+      .split(',')
+      .map((word) => word.trim())
+      .filter(Boolean),
+  );
+}
+
+function persistMimeticWords(words: Set<string>) {
+  window.localStorage.setItem(MASTERED_MIMETIC_STORAGE_KEY, Array.from(words).join(','));
+}
+
+function getKanaRowFilter(text: string): KanaRowFilter {
+  const firstKana = normalizeKanaForSearch(text).charAt(0);
+  const matched = KANA_ROW_FILTERS.find((filter) => filter.key !== 'all' && filter.kana.includes(firstKana));
+  return matched?.key ?? 'all';
+}
+
+function normalizeKanaForSearch(text: string) {
+  return text
+    .normalize('NFKC')
+    .replace(/[\u30a1-\u30f6]/g, (char) => String.fromCharCode(char.charCodeAt(0) - 0x60))
+    .toLowerCase();
+}
+
+function ConjugationLearningPanel() {
+  return (
+    <section className="workspace-panel workspace-panel--conjugation">
+      <div className="workspace-panel__header">
+        <div>
+          <p className="workspace-kicker">入门学习</p>
+          <h2>日语变形</h2>
+          <p className="workspace-meta">把词尾变化当作“句子工具箱”：先识别词类，再根据语气、时态和连接方式选择形态。</p>
+        </div>
+      </div>
+
+      <section className="conjugation-overview">
+        <div>
+          <p className="workspace-kicker">Conjugation Map</p>
+          <h3>先抓住三个问题</h3>
+        </div>
+        <div className="conjugation-overview__steps">
+          <span>这个词是动词、い形容词，还是な形容词？</span>
+          <span>句子要表达礼貌、否定、过去、请求，还是连接？</span>
+          <span>变化后还能不能接后面的语法点？</span>
+        </div>
+      </section>
+
+      <div className="conjugation-rule-grid">
+        {CONJUGATION_RULES.map((rule) => (
+          <article className="conjugation-rule-card" key={rule.title}>
+            <h3>{rule.title}</h3>
+            <p>{rule.description}</p>
+            <div className="conjugation-chip-list">
+              {rule.points.map((point) => <span key={point}>{point}</span>)}
+            </div>
+          </article>
+        ))}
+      </div>
+
+      <section className="conjugation-examples">
+        <div className="conjugation-section-heading">
+          <p className="workspace-kicker">常用变形举例</p>
+          <h3>从原形到句子</h3>
+        </div>
+        <div className="conjugation-example-list">
+          {CONJUGATION_EXAMPLES.map((example) => (
+            <article className="conjugation-example" key={`${example.label}-${example.base}`}>
+              <div className="conjugation-example__header">
+                <span>{example.label}</span>
+                <strong>{example.base}</strong>
+              </div>
+              <div className="conjugation-chip-list">
+                {example.forms.map((form) => <span key={form}>{form}</span>)}
+              </div>
+              <p className="conjugation-example__sentence">{example.sentence}</p>
+              <p>{example.translation}</p>
+            </article>
+          ))}
+        </div>
+      </section>
+    </section>
+  );
+}
+
+function ReadingBasicsPanel() {
+  const [activeCategory, setActiveCategory] = useState<ReadingBasicsCategory>('all');
+  const [onlyUnmastered, setOnlyUnmastered] = useState(false);
+  const [masteredIds, setMasteredIds] = useState<Set<string>>(() => parseStoredReadingBasicsIds());
+  const [animatedProgressPercent, setAnimatedProgressPercent] = useState(0);
+  const [renderedCount, setRenderedCount] = useState(READING_BASICS_RENDER_BATCH_SIZE);
+
+  const progressByCategory = useMemo(() => {
+    return Object.fromEntries(
+      READING_BASICS_CATEGORY_FILTERS.map((filter) => {
+        const items = filter.key === 'all'
+          ? READING_BASICS_ITEMS
+          : READING_BASICS_ITEMS.filter((item) => item.category === filter.key);
+        const masteredCount = items.filter((item) => masteredIds.has(item.id)).length;
+
+        return [filter.key, {
+          masteredCount,
+          percent: items.length ? Math.round((masteredCount / items.length) * 100) : 0,
+          totalCount: items.length,
+        }];
+      }),
+    ) as Record<ReadingBasicsCategory, { masteredCount: number; percent: number; totalCount: number }>;
+  }, [masteredIds]);
+
+  const visibleItems = useMemo(() => {
+    return READING_BASICS_ITEMS.filter((item) => {
+      if (activeCategory !== 'all' && item.category !== activeCategory) return false;
+      if (onlyUnmastered && masteredIds.has(item.id)) return false;
+      return true;
+    });
+  }, [activeCategory, masteredIds, onlyUnmastered]);
+
+  const activeProgress = progressByCategory[activeCategory];
+  const renderedItems = useMemo(
+    () => visibleItems.slice(0, renderedCount),
+    [renderedCount, visibleItems],
+  );
+
+  useEffect(() => {
+    setAnimatedProgressPercent(0);
+    const animationFrame = window.requestAnimationFrame(() => {
+      setAnimatedProgressPercent(activeProgress.percent);
+    });
+
+    return () => window.cancelAnimationFrame(animationFrame);
+  }, [activeCategory, activeProgress.percent]);
+
+  useEffect(() => {
+    setRenderedCount(READING_BASICS_RENDER_BATCH_SIZE);
+  }, [activeCategory, onlyUnmastered, visibleItems.length]);
+
+  useEffect(() => {
+    if (renderedCount >= visibleItems.length) return;
+
+    const loadTimer = window.setTimeout(() => {
+      setRenderedCount((current) => Math.min(current + READING_BASICS_RENDER_BATCH_SIZE, visibleItems.length));
+    }, 40);
+
+    return () => window.clearTimeout(loadTimer);
+  }, [renderedCount, visibleItems.length]);
+
+  const handleMasteredChange = useCallback((id: string, isMastered: boolean) => {
+    setMasteredIds((current) => {
+      const next = new Set(current);
+      if (isMastered) {
+        next.add(id);
+      } else {
+        next.delete(id);
+      }
+      persistReadingBasicsIds(next);
+      return next;
+    });
+  }, []);
+
+  const handleCategoryChange = (category: ReadingBasicsCategory) => {
+    setRenderedCount(READING_BASICS_RENDER_BATCH_SIZE);
+    setActiveCategory(category);
+  };
+
+  const handleOnlyUnmasteredChange = (checked: boolean) => {
+    setRenderedCount(READING_BASICS_RENDER_BATCH_SIZE);
+    setOnlyUnmastered(checked);
+    if (checked) {
+      setMasteredIds(parseStoredReadingBasicsIds());
+    }
+  };
+
+  return (
+    <section className="workspace-panel workspace-panel--reading-basics">
+      <div className="workspace-panel__header">
+        <div>
+          <p className="workspace-kicker">入门学习</p>
+          <h2>数字・单位・符号</h2>
+          <p className="workspace-meta">集中整理数字、常见量词单位、标点符号的读音和变音规律，读文章和听报数时会轻松很多。</p>
+        </div>
+        <label className="grammar-mastered-filter">
+          <input
+            checked={onlyUnmastered}
+            onChange={(event) => handleOnlyUnmasteredChange(event.target.checked)}
+            type="checkbox"
+          />
+          <span>只看未掌握项目</span>
+        </label>
+      </div>
+
+      <div className="grammar-toolbar">
+        <div className="grammar-tabs" role="tablist" aria-label="读音基础分类">
+          {READING_BASICS_CATEGORY_FILTERS.map((filter) => (
+            <button
+              aria-selected={activeCategory === filter.key}
+              className={`grammar-tab ${activeCategory === filter.key ? 'is-active' : ''}`}
+              key={filter.key}
+              onClick={() => handleCategoryChange(filter.key)}
+              role="tab"
+              type="button"
+            >
+              {filter.label}
+            </button>
+          ))}
+        </div>
+        <div className="grammar-progress" aria-label={`${activeCategory} 掌握度 ${activeProgress.percent}%`}>
+          <div className="grammar-progress__meta">
+            <span>掌握度</span>
+            <strong>{activeProgress.masteredCount}/{activeProgress.totalCount}</strong>
+          </div>
+          <div className="grammar-progress__track" title={`${activeProgress.percent}% 已掌握`}>
+            <span
+              className="grammar-progress__fill"
+              style={{ width: `${animatedProgressPercent}%` }}
+            />
+          </div>
+        </div>
+      </div>
+
+      <div className="reading-basics-grid" key={`${activeCategory}-${onlyUnmastered ? 'unmastered' : 'all'}`}>
+        {renderedItems.map((item) => (
+          <ReadingBasicsCard
+            isMastered={masteredIds.has(item.id)}
+            item={item}
+            key={item.id}
+            onMasteredChange={handleMasteredChange}
+          />
+        ))}
+      </div>
+
+      {!visibleItems.length ? (
+        <div className="workspace-empty workspace-empty--compact">这一类已经全部掌握了。</div>
+      ) : null}
+    </section>
+  );
+}
+
+const ReadingBasicsCard = memo(function ReadingBasicsCard({
+  isMastered,
+  item,
+  onMasteredChange,
+}: {
+  isMastered: boolean;
+  item: ReadingBasicsItem;
+  onMasteredChange: (id: string, isMastered: boolean) => void;
+}) {
+  const categoryLabel = READING_BASICS_CATEGORY_FILTERS.find((filter) => filter.key === item.category)?.label ?? '项目';
+
+  return (
+    <article className={`reading-basics-card ${isMastered ? 'is-mastered' : ''}`}>
+      <label className="grammar-card__mastered">
+        <input
+          checked={isMastered}
+          onChange={(event) => onMasteredChange(item.id, event.target.checked)}
+          type="checkbox"
+        />
+        <span>{isMastered ? '已掌握' : '未掌握'}</span>
+      </label>
+      <div>
+        <p className="grammar-card__pattern">{categoryLabel}</p>
+        <h3>{item.title}</h3>
+        <p className="reading-basics-card__reading">{item.reading}</p>
+        <p className="grammar-card__translation">{item.meaning}</p>
+      </div>
+      <p className="reading-basics-card__rule">{item.rule}</p>
+      <div className="mimetic-card__tags">
+        {item.tags.map((tag) => <span key={tag}>{tag}</span>)}
+      </div>
+      <div className="reading-basics-card__examples">
+        {item.examples.map((example) => (
+          <span key={`${item.id}-${example.text}`}>
+            <strong>{example.text}</strong>
+            <small>{example.reading}</small>
+            {example.note ? <em>{example.note}</em> : null}
+            <button
+              aria-label={`播放 ${example.text} 的读音`}
+              className="reading-basics-card__audio"
+              onClick={() => playAudio(getPrimaryReading(example.reading))}
+              title="播放读音"
+              type="button"
+            >
+              <Volume2 size={15} strokeWidth={1.8} />
+            </button>
+          </span>
+        ))}
+      </div>
+    </article>
+  );
+});
+
+function getPrimaryReading(reading: string) {
+  return reading.split('/')[0].trim();
+}
+
 function BasicGrammarPanel() {
+  const [activeLevel, setActiveLevel] = useState<GrammarLevelFilter>('all');
+  const [onlyUnmastered, setOnlyUnmastered] = useState(false);
+  const [masteredIds, setMasteredIds] = useState<Set<string>>(() => parseStoredGrammarIds());
+  const [animatedProgressPercent, setAnimatedProgressPercent] = useState(0);
+  const [renderedGrammarCount, setRenderedGrammarCount] = useState(GRAMMAR_RENDER_BATCH_SIZE);
+
+  const grammarProgressByLevel = useMemo(() => {
+    return Object.fromEntries(
+      GRAMMAR_LEVEL_FILTERS.map((filter) => {
+        const sections = filter.key === 'all'
+          ? BASIC_GRAMMAR_SECTIONS
+          : BASIC_GRAMMAR_SECTIONS.filter((section) => section.level === filter.key);
+        const masteredCount = sections.filter((section) => masteredIds.has(section.id)).length;
+
+        return [filter.key, {
+          masteredCount,
+          percent: sections.length ? Math.round((masteredCount / sections.length) * 100) : 0,
+          totalCount: sections.length,
+        }];
+      }),
+    ) as Record<GrammarLevelFilter, { masteredCount: number; percent: number; totalCount: number }>;
+  }, [masteredIds]);
+
+  const visibleSections = useMemo(() => {
+    return BASIC_GRAMMAR_SECTIONS.filter((section) => {
+      if (activeLevel !== 'all' && section.level !== activeLevel) return false;
+      if (onlyUnmastered && masteredIds.has(section.id)) return false;
+      return true;
+    });
+  }, [activeLevel, masteredIds, onlyUnmastered]);
+  const activeProgress = grammarProgressByLevel[activeLevel];
+  const renderedSections = useMemo(
+    () => visibleSections.slice(0, renderedGrammarCount),
+    [renderedGrammarCount, visibleSections],
+  );
+
+  useEffect(() => {
+    setAnimatedProgressPercent(0);
+    const animationFrame = window.requestAnimationFrame(() => {
+      setAnimatedProgressPercent(activeProgress.percent);
+    });
+
+    return () => window.cancelAnimationFrame(animationFrame);
+  }, [activeLevel, activeProgress.percent]);
+
+  useEffect(() => {
+    setRenderedGrammarCount(GRAMMAR_RENDER_BATCH_SIZE);
+  }, [activeLevel, onlyUnmastered, visibleSections.length]);
+
+  useEffect(() => {
+    if (renderedGrammarCount >= visibleSections.length) return;
+
+    const loadTimer = window.setTimeout(() => {
+      setRenderedGrammarCount((current) => Math.min(current + GRAMMAR_RENDER_BATCH_SIZE, visibleSections.length));
+    }, 40);
+
+    return () => window.clearTimeout(loadTimer);
+  }, [renderedGrammarCount, visibleSections.length]);
+
+  const syncStoredMasteredIds = useCallback(() => {
+    setMasteredIds(parseStoredGrammarIds());
+  }, []);
+
+  const handleOnlyUnmasteredChange = (checked: boolean) => {
+    setRenderedGrammarCount(GRAMMAR_RENDER_BATCH_SIZE);
+    setOnlyUnmastered(checked);
+    if (checked) {
+      syncStoredMasteredIds();
+    }
+  };
+
+  const handleActiveLevelChange = (level: GrammarLevelFilter) => {
+    setRenderedGrammarCount(GRAMMAR_RENDER_BATCH_SIZE);
+    setActiveLevel(level);
+  };
+
+  const handleCardMasteredChange = useCallback((id: string, isMastered: boolean) => {
+    setMasteredIds((current) => {
+      const next = new Set(current);
+      if (isMastered) {
+        next.add(id);
+      } else {
+        next.delete(id);
+      }
+      return next;
+    });
+  }, []);
+
   return (
     <section className="workspace-panel workspace-panel--grammar">
       <div className="workspace-panel__header">
@@ -938,25 +2253,360 @@ function BasicGrammarPanel() {
           <h2>基础语法</h2>
           <p className="workspace-meta">先建立能读懂简单句子的框架：判断句、助词、形容词、时态和疑问句。</p>
         </div>
+        <label className="grammar-mastered-filter">
+          <input
+            checked={onlyUnmastered}
+            onChange={(event) => handleOnlyUnmasteredChange(event.target.checked)}
+            type="checkbox"
+          />
+          <span>只看未掌握语法</span>
+        </label>
       </div>
 
-      <div className="grammar-grid">
-        {BASIC_GRAMMAR_SECTIONS.map((section) => (
-          <article className="grammar-card" key={section.title}>
-            <div>
-              <p className="grammar-card__pattern">{section.pattern}</p>
-              <h3>{section.title}</h3>
-            </div>
-            <div className="grammar-card__examples">
-              {section.examples.map((example) => <span key={example}>{example}</span>)}
-            </div>
-            <p>{section.note}</p>
-          </article>
-        ))}
+      <div className="grammar-toolbar">
+        <div className="grammar-tabs" role="tablist" aria-label="语法等级">
+          {GRAMMAR_LEVEL_FILTERS.map((filter) => (
+            <button
+              aria-selected={activeLevel === filter.key}
+              className={`grammar-tab ${activeLevel === filter.key ? 'is-active' : ''}`}
+              key={filter.key}
+              onClick={() => handleActiveLevelChange(filter.key)}
+              role="tab"
+              type="button"
+            >
+              {filter.label}
+            </button>
+          ))}
+        </div>
+        <div className="grammar-progress" aria-label={`${activeLevel} 掌握度 ${activeProgress.percent}%`}>
+          <div className="grammar-progress__meta">
+            <span>掌握度</span>
+            <strong>{activeProgress.percent}%</strong>
+          </div>
+          <div className="grammar-progress__track" title={`${activeProgress.masteredCount}/${activeProgress.totalCount} 已掌握`}>
+            <span
+              className="grammar-progress__fill"
+              style={{ width: `${animatedProgressPercent}%` }}
+            />
+          </div>
+        </div>
+      </div>
+
+      <div className="grammar-grid" key={`${activeLevel}-${onlyUnmastered ? 'unmastered' : 'all'}`}>
+        {renderedSections.map((section) => {
+          const isMastered = masteredIds.has(section.id);
+
+          return (
+            <GrammarCard
+              initialIsMastered={isMastered}
+              key={section.id}
+              onMasteredChange={handleCardMasteredChange}
+              section={section}
+            />
+          );
+        })}
       </div>
     </section>
   );
 }
+
+const GrammarCard = memo(function GrammarCard({
+  initialIsMastered,
+  onMasteredChange,
+  section,
+}: {
+  initialIsMastered: boolean;
+  onMasteredChange: (id: string, isMastered: boolean) => void;
+  section: GrammarItem;
+}) {
+  const [isMastered, setIsMastered] = useState(() => initialIsMastered || isGrammarMastered(section.id));
+  const [exampleRubyMap, setExampleRubyMap] = useState<Record<string, string>>(() => {
+    return Object.fromEntries(
+      section.examples
+        .map((example, index) => {
+          const key = getGrammarExampleRubyKey(section.id, index);
+          return [key, grammarExampleRubyCache.get(key) || example.sentence] as const;
+        }),
+    );
+  });
+
+  useEffect(() => {
+    let cancelled = false;
+    const missingExamples = section.examples
+      .map((example, index) => ({ key: getGrammarExampleRubyKey(section.id, index), sentence: example.sentence }))
+      .filter((example) => !grammarExampleRubyCache.has(example.key));
+
+    if (!missingExamples.length) return;
+
+    void Promise.all(
+      missingExamples.map(async (example) => [example.key, await furiganaService.convert(example.sentence)] as const),
+    ).then((entries) => {
+      if (cancelled) return;
+      for (const [key, html] of entries) {
+        grammarExampleRubyCache.set(key, html);
+      }
+      setExampleRubyMap((current) => ({
+        ...current,
+        ...Object.fromEntries(entries),
+      }));
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [section]);
+
+  const toggleMastered = () => {
+    const nextValue = !isMastered;
+    const nextIds = parseStoredGrammarIds();
+    if (nextValue) {
+      nextIds.add(section.id);
+    } else {
+      nextIds.delete(section.id);
+    }
+    persistGrammarIds(nextIds);
+    setIsMastered(nextValue);
+    onMasteredChange(section.id, nextValue);
+  };
+
+  return (
+    <article className={`grammar-card ${isMastered ? 'is-mastered' : ''}`}>
+      <label className="grammar-card__mastered">
+        <input
+          checked={isMastered}
+          onChange={toggleMastered}
+          type="checkbox"
+        />
+        <span>{isMastered ? '已掌握' : '未掌握'}</span>
+      </label>
+      <div>
+        <p className="grammar-card__pattern">{section.level} · {section.kanaIndex}</p>
+        <h3>{section.title}</h3>
+        <p className="grammar-card__translation">{section.translation}</p>
+      </div>
+      <div className="grammar-card__patterns">
+        {section.patterns.map((pattern) => <span key={pattern}>{pattern}</span>)}
+      </div>
+      <p>{section.explanation}</p>
+      <p className="grammar-card__formation">{section.formation}</p>
+      <div className="grammar-card__examples">
+        {section.examples.map((example, index) => {
+          const rubyKey = getGrammarExampleRubyKey(section.id, index);
+
+          return (
+            <span key={example.sentence}>
+              <strong dangerouslySetInnerHTML={{ __html: exampleRubyMap[rubyKey] || example.sentence }} />
+              <small>{example.translation}</small>
+            </span>
+          );
+        })}
+      </div>
+    </article>
+  );
+});
+
+function getGrammarExampleRubyKey(sectionId: string, exampleIndex: number) {
+  return `${sectionId}:${exampleIndex}`;
+}
+
+function MimeticLearningPanel() {
+  const [mimeticWords, setMimeticWords] = useState<MimeticWordItem[]>([]);
+  const [loadError, setLoadError] = useState('');
+  const [query, setQuery] = useState('');
+  const [activeRow, setActiveRow] = useState<KanaRowFilter>('all');
+  const [onlyUnmastered, setOnlyUnmastered] = useState(false);
+  const [masteredWords, setMasteredWords] = useState<Set<string>>(() => parseStoredMimeticWords());
+  const [renderedCount, setRenderedCount] = useState(MIMETIC_RENDER_BATCH_SIZE);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    void fetch(browser.runtime.getURL('/json/mimetic-words.json'))
+      .then((response) => response.json() as Promise<Record<string, MimeticWordEntry>>)
+      .then((payload) => {
+        if (cancelled) return;
+        const items = Object.entries(payload)
+          .map(([word, entry]) => ({
+            ...entry,
+            word,
+            row: getKanaRowFilter(entry.reading || word),
+          }))
+          .sort((a, b) => normalizeKanaForSearch(a.reading || a.word).localeCompare(normalizeKanaForSearch(b.reading || b.word), 'ja'));
+        setMimeticWords(items);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setLoadError('拟声拟态词典加载失败。');
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const filteredWords = useMemo(() => {
+    const normalizedQuery = normalizeKanaForSearch(query.trim());
+
+    return mimeticWords.filter((item) => {
+      if (activeRow !== 'all' && item.row !== activeRow) return false;
+      if (onlyUnmastered && masteredWords.has(item.word)) return false;
+      if (!normalizedQuery) return true;
+
+      const searchableText = normalizeKanaForSearch([
+        item.word,
+        item.reading,
+        item.meaning,
+        item.example,
+        ...(item.tags ?? []),
+      ].filter(Boolean).join(' '));
+
+      return searchableText.includes(normalizedQuery);
+    });
+  }, [activeRow, masteredWords, mimeticWords, onlyUnmastered, query]);
+
+  const renderedWords = useMemo(
+    () => filteredWords.slice(0, renderedCount),
+    [filteredWords, renderedCount],
+  );
+
+  useEffect(() => {
+    setRenderedCount(MIMETIC_RENDER_BATCH_SIZE);
+  }, [activeRow, onlyUnmastered, query, filteredWords.length]);
+
+  useEffect(() => {
+    if (renderedCount >= filteredWords.length) return;
+
+    const loadTimer = window.setTimeout(() => {
+      setRenderedCount((current) => Math.min(current + MIMETIC_RENDER_BATCH_SIZE, filteredWords.length));
+    }, 40);
+
+    return () => window.clearTimeout(loadTimer);
+  }, [filteredWords.length, renderedCount]);
+
+  const masteredCount = mimeticWords.filter((item) => masteredWords.has(item.word)).length;
+  const progressPercent = mimeticWords.length ? Math.round((masteredCount / mimeticWords.length) * 100) : 0;
+
+  const handleMasteredChange = useCallback((word: string, isMastered: boolean) => {
+    setMasteredWords((current) => {
+      const next = new Set(current);
+      if (isMastered) {
+        next.add(word);
+      } else {
+        next.delete(word);
+      }
+      persistMimeticWords(next);
+      return next;
+    });
+  }, []);
+
+  return (
+    <section className="workspace-panel workspace-panel--mimetic">
+      <div className="workspace-panel__header">
+        <div>
+          <p className="workspace-kicker">入门学习</p>
+          <h2>擬態語</h2>
+          <p className="workspace-meta">擬態語在日语里比较特殊，经常靠声音和感觉传达状态，也因此比普通单词更难记。</p>
+        </div>
+        <label className="grammar-mastered-filter">
+          <input
+            checked={onlyUnmastered}
+            onChange={(event) => setOnlyUnmastered(event.target.checked)}
+            type="checkbox"
+          />
+          <span>只看未掌握的词</span>
+        </label>
+      </div>
+
+      <div className="mimetic-toolbar">
+        <label className="mimetic-search">
+          <span>搜索</span>
+          <input
+            placeholder="すべすべ / 光滑 / 触感"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+          />
+        </label>
+        <div className="grammar-progress" aria-label={`擬態語掌握度 ${progressPercent}%`}>
+          <div className="grammar-progress__meta">
+            <span>掌握度</span>
+            <strong>{masteredCount}/{mimeticWords.length}</strong>
+          </div>
+          <div className="grammar-progress__track" title={`${progressPercent}% 已掌握`}>
+            <span className="grammar-progress__fill" style={{ width: `${progressPercent}%` }} />
+          </div>
+        </div>
+      </div>
+
+      <div className="mimetic-row-filter" role="tablist" aria-label="按假名行筛选">
+        {KANA_ROW_FILTERS.map((filter) => (
+          <button
+            aria-selected={activeRow === filter.key}
+            className={`grammar-tab ${activeRow === filter.key ? 'is-active' : ''}`}
+            key={filter.key}
+            onClick={() => setActiveRow(filter.key)}
+            role="tab"
+            type="button"
+          >
+            {filter.label}
+          </button>
+        ))}
+      </div>
+
+      {loadError ? <div className="workspace-empty workspace-empty--compact">{loadError}</div> : null}
+
+      <div className="mimetic-list" key={`${activeRow}-${onlyUnmastered ? 'unmastered' : 'all'}-${query}`}>
+        {renderedWords.map((item) => (
+          <MimeticWordCard
+            isMastered={masteredWords.has(item.word)}
+            item={item}
+            key={item.word}
+            onMasteredChange={handleMasteredChange}
+          />
+        ))}
+      </div>
+
+      {!loadError && !filteredWords.length ? (
+        <div className="workspace-empty workspace-empty--compact">没有匹配的擬態語。</div>
+      ) : null}
+    </section>
+  );
+}
+
+const MimeticWordCard = memo(function MimeticWordCard({
+  isMastered,
+  item,
+  onMasteredChange,
+}: {
+  isMastered: boolean;
+  item: MimeticWordItem;
+  onMasteredChange: (word: string, isMastered: boolean) => void;
+}) {
+  return (
+    <article className={`mimetic-card ${isMastered ? 'is-mastered' : ''}`}>
+      <label className="grammar-card__mastered">
+        <input
+          checked={isMastered}
+          onChange={(event) => onMasteredChange(item.word, event.target.checked)}
+          type="checkbox"
+        />
+        <span>{isMastered ? '已掌握' : '未掌握'}</span>
+      </label>
+      <div className="mimetic-card__main">
+        <p className="grammar-card__pattern">{KANA_ROW_FILTERS.find((filter) => filter.key === item.row)?.label ?? '其他'}</p>
+        <h3>{item.word}</h3>
+        {item.reading && item.reading !== item.word ? <p className="mimetic-card__reading">{item.reading}</p> : null}
+        <p className="mimetic-card__meaning">{item.meaning}</p>
+      </div>
+      {item.tags?.length ? (
+        <div className="mimetic-card__tags">
+          {item.tags.map((tag) => <span key={tag}>{tag}</span>)}
+        </div>
+      ) : null}
+      {item.example ? <p className="mimetic-card__example">{item.example}</p> : null}
+    </article>
+  );
+});
 
 function KanaLearningPanel({
   activeMode,

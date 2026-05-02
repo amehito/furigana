@@ -21,6 +21,7 @@ type SpecialCasesPayload = {
 const LOCAL_DICT = readJsonFixture('../public/json/kanji-jouyou.json');
 const LOCAL_FIXED_READINGS = readJsonFixture('../public/json/fixed-readings.json');
 const LOCAL_FAMILY_NAMES = readJsonFixture('../public/json/family-names.json');
+const LOCAL_MIMETIC_WORDS = readJsonFixture('../public/json/mimetic-words.json');
 
 const CDN_VERSION_URL = 'https://cdn.jsdelivr.net/gh/amehito/japanese-dict-patch@main/version.json';
 const CDN_SPECIAL_CASES_URL = 'https://cdn.jsdelivr.net/gh/amehito/japanese-dict-patch@main/special_cases.json';
@@ -41,6 +42,7 @@ function setupFetchMock(options?: {
   localDict?: unknown;
   localFixedReadings?: unknown;
   localFamilyNames?: unknown;
+  localMimeticWords?: unknown;
   versionPayload?: PatchVersionPayload;
   specialCasesPayload?: SpecialCasesPayload;
 }) {
@@ -48,6 +50,7 @@ function setupFetchMock(options?: {
     localDict = LOCAL_DICT,
     localFixedReadings = LOCAL_FIXED_READINGS,
     localFamilyNames = LOCAL_FAMILY_NAMES,
+    localMimeticWords = LOCAL_MIMETIC_WORDS,
     versionPayload = { version: '20260329.01', min_app_version: '1.0.0', last_updated: '2026-03-29' },
     specialCasesPayload = { version: '20260329.01', compounds: {}, patch_chars: {} },
   } = options ?? {};
@@ -58,6 +61,7 @@ function setupFetchMock(options?: {
     if (url.includes('/json/kanji-jouyou.json')) return createJsonResponse(localDict);
     if (url.includes('/json/fixed-readings.json')) return createJsonResponse(localFixedReadings);
     if (url.includes('/json/family-names.json')) return createJsonResponse(localFamilyNames);
+    if (url.includes('/json/mimetic-words.json')) return createJsonResponse(localMimeticWords);
     if (url === CDN_VERSION_URL) return createJsonResponse(versionPayload);
     if (url === CDN_SPECIAL_CASES_URL) return createJsonResponse(specialCasesPayload);
 
@@ -147,6 +151,19 @@ describe('furiganaService.convert', () => {
     const html = await service.convert('今日', { prev: '昨', next: 'は晴れ' });
 
     expectRubyReadingsToMatch(extractRubyReadings(html), ['きょう']);
+  });
+
+  it('annotates maintained mimetic words without requiring kanji', async () => {
+    setupFetchMock();
+    const service = await importFreshService();
+
+    const html = await service.convert('肌がすべすべで、雨がドシャドシャ降る。', { prev: '', next: '' });
+
+    expect(html).toContain('<ruby data-reading-tags="mimetic"');
+    expect(html).toContain('data-mimetic-meaning="光滑；细腻"');
+    expect(html).toContain('<ruby data-reading-tags="mimetic" data-mimetic-meaning="哗啦哗啦；大量落下或倾倒"');
+    expect(extractRubyReadings(html)).toContain('光滑；细腻');
+    expect(extractRubyReadings(html)).toContain('哗啦哗啦；大量落下或倾倒');
   });
 
   it.each([

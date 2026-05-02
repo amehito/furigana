@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Check, ChevronDown, Download, Link2, LoaderCircle } from 'lucide-react';
+import { Check, ChevronDown, Download, Link2, LoaderCircle, Mic, Play, Square } from 'lucide-react';
 import { browser } from 'wxt/browser';
 import {
   DEFAULT_EXTENSION_SETTINGS,
@@ -77,6 +77,7 @@ type SiteTab = 'blacklist' | 'whitelist';
 type SaveState = 'idle' | 'saving' | 'saved';
 type ExportState = 'idle' | 'loading';
 type PanelLoadState = 'loading' | 'ready';
+type RecorderState = 'idle' | 'recording' | 'recorded' | 'playing';
 
 function App() {
   const [settings, setSettings] = useState<TooltipSettings>(DEFAULT_SETTINGS);
@@ -89,15 +90,51 @@ function App() {
   const [patchNotice, setPatchNotice] = useState('');
   const [settingsState, setSettingsState] = useState<PanelLoadState>('loading');
   const [siteState, setSiteState] = useState<PanelLoadState>('loading');
+  const [recorderState, setRecorderState] = useState<RecorderState>('idle');
+  const [recordingUrl, setRecordingUrl] = useState('');
+  const [recordingError, setRecordingError] = useState('');
   const saveTimerRef = useRef<number | null>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const recordingChunksRef = useRef<Blob[]>([]);
+  const recordingStreamRef = useRef<MediaStream | null>(null);
+  const recordingUrlRef = useRef('');
+  const playbackRef = useRef<HTMLAudioElement | null>(null);
+  const mountedRef = useRef(true);
+
+  const stopRecordingStream = () => {
+    recordingStreamRef.current?.getTracks().forEach((track) => track.stop());
+    recordingStreamRef.current = null;
+  };
+
+  const revokeRecordingUrl = () => {
+    if (recordingUrlRef.current) {
+      URL.revokeObjectURL(recordingUrlRef.current);
+      recordingUrlRef.current = '';
+    }
+  };
+
+  const stopPlayback = () => {
+    if (!playbackRef.current) return;
+
+    playbackRef.current.pause();
+    playbackRef.current.currentTime = 0;
+    playbackRef.current = null;
+  };
 
   useEffect(() => {
     document.documentElement.classList.add('popup-react-mounted');
 
     return () => {
+      mountedRef.current = false;
       if (saveTimerRef.current) {
         window.clearTimeout(saveTimerRef.current);
       }
+      if (mediaRecorderRef.current?.state === 'recording') {
+        mediaRecorderRef.current.stop();
+      }
+      stopPlayback();
+      stopRecordingStream();
+      revokeRecordingUrl();
     };
   }, []);
 
@@ -214,6 +251,134 @@ function App() {
     await saveExtensionSettings({ globalEnabled: !extensionSettings.globalEnabled });
   };
 
+  const startRecording = async () => {
+    if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') {
+      setRecordingError('当前浏览器不支持录音。');
+      return;
+    }
+
+    setRecordingError('');
+    stopPlayback();
+    revokeRecordingUrl();
+    setRecordingUrl('');
+    setRecorderState('idle');
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const recorder = new MediaRecorder(stream);
+
+      recordingChunksRef.current = [];
+      recordingStreamRef.current = stream;
+      mediaRecorderRef.current = recorder;
+
+      recorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          recordingChunksRef.current.push(event.data);
+        }
+      };
+
+      recorder.onstop = () => {
+        const blob = new Blob(recordingChunksRef.current, {
+          type: recorder.mimeType || 'audio/webm',
+        });
+
+        recordingChunksRef.current = [];
+        mediaRecorderRef.current = null;
+        stopRecordingStream();
+
+        if (!mountedRef.current) {
+          return;
+        }
+
+        if (!blob.size) {
+          setRecorderState('idle');
+          setRecordingError('没有录到声音，请再试一次。');
+          return;
+        }
+
+        const nextUrl = URL.createObjectURL(blob);
+        recordingUrlRef.current = nextUrl;
+        setRecordingUrl(nextUrl);
+        setRecorderState('recorded');
+      };
+
+      recorder.onerror = () => {
+        if (!mountedRef.current) {
+          return;
+        }
+
+        setRecordingError('录音中断了，请重新开始。');
+        setRecorderState('idle');
+        stopRecordingStream();
+      };
+
+      recorder.start();
+      setRecorderState('recording');
+    } catch (error) {
+      const message = error instanceof DOMException && error.name === 'NotAllowedError'
+        ? '需要允许麦克风权限后才能录音。'
+        : '无法开始录音，请检查麦克风权限。';
+      setRecordingError(message);
+      setRecorderState('idle');
+      stopRecordingStream();
+    }
+  };
+
+  const stopRecording = () => {
+    if (mediaRecorderRef.current?.state === 'recording') {
+      mediaRecorderRef.current.stop();
+    }
+  };
+
+  const toggleRecording = async () => {
+    if (recorderState === 'recording') {
+      stopRecording();
+      return;
+    }
+
+    await startRecording();
+  };
+
+  const togglePlayback = async () => {
+    if (!recordingUrl || recorderState === 'recording') return;
+
+    if (recorderState === 'playing') {
+      stopPlayback();
+      setRecorderState('recorded');
+      return;
+    }
+
+    stopPlayback();
+
+    const audio = new Audio(recordingUrl);
+    playbackRef.current = audio;
+    audio.onended = () => {
+      playbackRef.current = null;
+      if (!mountedRef.current) {
+        return;
+      }
+      setRecorderState('recorded');
+    };
+    audio.onerror = () => {
+      playbackRef.current = null;
+      if (!mountedRef.current) {
+        return;
+      }
+      setRecorderState('recorded');
+      setRecordingError('播放失败，请重新录音。');
+    };
+
+    try {
+      await audio.play();
+      setRecordingError('');
+      setRecorderState('playing');
+    } catch {
+      playbackRef.current = null;
+      setRecorderState('recorded');
+      setRecordingError('播放失败，请重新录音。');
+    }
+  };
+
   const setSiteAccessMode = async (mode: SiteAccessMode) => {
     setActiveSiteTab(mode);
     await saveExtensionSettings({ siteAccessMode: mode });
@@ -301,24 +466,61 @@ function App() {
     await browser.tabs.create({ url: workspaceUrl });
   };
 
+  const openMicrophoneSettings = async () => {
+    try {
+      await browser.tabs.create({ url: 'chrome://settings/content/microphone' });
+    } catch {
+      window.alert('请在浏览器设置中打开“隐私和安全 > 网站设置 > 麦克风”，允许本扩展使用麦克风。');
+    }
+  };
+
   return (
     <div className="oye-control-center">
       <header className="oye-dashboard-header">
         <div className="oye-dashboard-header__title-wrap">
           <h1 className="oye-dashboard-header__title">瓯葉日语注音</h1>
         </div>
-        <div className="oye-dashboard-header__toggle-wrap">
-          <span className={`oye-dashboard-header__status ${extensionSettings.globalEnabled ? 'is-on' : 'is-off'}`}>
-            {extensionSettings.globalEnabled ? '运行中' : '已暂停'}
-          </span>
-          <button
-            aria-label={extensionSettings.globalEnabled ? '暂停插件' : '启用插件'}
-            className={`oye-ios-switch ${extensionSettings.globalEnabled ? 'is-on' : ''}`}
-            onClick={toggleGlobalEnabled}
-            type="button"
-          >
-            <span className="oye-ios-switch__thumb" />
-          </button>
+        <div className="oye-dashboard-header__actions">
+          <div className="oye-recorder" aria-label="朗读录音练习">
+            <button
+              className={`oye-recorder__button ${recorderState === 'recording' ? 'is-recording' : ''}`}
+              onClick={() => void toggleRecording()}
+              type="button"
+            >
+              {recorderState === 'recording' ? <Square className="oye-icon" {...ICON_PROPS} /> : <Mic className="oye-icon" {...ICON_PROPS} />}
+              <span>{recorderState === 'recording' ? '停止' : '录音'}</span>
+            </button>
+            <button
+              className={`oye-recorder__button ${recorderState === 'playing' ? 'is-playing' : ''}`}
+              disabled={!recordingUrl || recorderState === 'recording'}
+              onClick={() => void togglePlayback()}
+              type="button"
+            >
+              {recorderState === 'playing' ? <Square className="oye-icon" {...ICON_PROPS} /> : <Play className="oye-icon" {...ICON_PROPS} />}
+              <span>{recorderState === 'playing' ? '停止' : '播放'}</span>
+            </button>
+          </div>
+          {recordingError ? (
+            <div className="oye-recorder__error">
+              <span>{recordingError}</span>
+              <button className="oye-recorder__settings-link" onClick={() => void openMicrophoneSettings()} type="button">
+                去设置
+              </button>
+            </div>
+          ) : null}
+          <div className="oye-dashboard-header__toggle-wrap">
+            <span className={`oye-dashboard-header__status ${extensionSettings.globalEnabled ? 'is-on' : 'is-off'}`}>
+              {extensionSettings.globalEnabled ? '运行中' : '已暂停'}
+            </span>
+            <button
+              aria-label={extensionSettings.globalEnabled ? '暂停插件' : '启用插件'}
+              className={`oye-ios-switch ${extensionSettings.globalEnabled ? 'is-on' : ''}`}
+              onClick={toggleGlobalEnabled}
+              type="button"
+            >
+              <span className="oye-ios-switch__thumb" />
+            </button>
+          </div>
         </div>
       </header>
 

@@ -3,5 +3,6 @@ export default defineBackground(() => {
   
   if (import.meta.env.MODE === 'development') {
     browser.tabs.create({ url: 'lab.html' })
+    browser.tabs.create({ url: 'dashboard.html' })
   }
 });

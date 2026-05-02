@@ -40,6 +40,13 @@ type ReadingResult = {
   tags?: ReadingTag[];
   alternativeReadings?: string[];
 };
+export type MimeticWordEntry = {
+  reading?: string;
+  meaning: string;
+  tags?: string[];
+  example?: string;
+};
+type MimeticWordMap = Record<string, MimeticWordEntry>;
 type SpecialCasesPayload = {
   version?: string;
   compounds?: Record<string, string[] | string>;
@@ -147,6 +154,8 @@ class FuriganaProcessor {
   private dict: KanjiDict;
   private fixedReadingMap = new Map<string, string>();
   private fixedReadingKeys: string[] = [];
+  private mimeticWordMap = new Map<string, MimeticWordEntry>();
+  private mimeticWordKeys: string[] = [];
   private overridesCache: RemoteOverride[] = [];
   private sortedOverridesCache: RemoteOverride[] = [];
   private overridesPromise: Promise<RemoteOverride[]> | null = null;
@@ -156,11 +165,13 @@ class FuriganaProcessor {
     dict: KanjiDict,
     cityDict: Record<string, string>,
     fixedReadings: Record<string, string>,
+    mimeticWords: MimeticWordMap,
     numericCounterConfig: NumericCounterConfig,
     private readonly fallbackConvert: (text: string) => string,
   ) {
     this.dict = dict;
     this.setFixedReadings(fixedReadings);
+    this.setMimeticWords(mimeticWords);
     this.numericCounterConfig = numericCounterConfig;
     this.entityMap = new Map(Object.entries(cityDict));
 
@@ -179,6 +190,14 @@ class FuriganaProcessor {
 
   updateFixedReadings(fixedReadings: FixedReadingMap) {
     this.setFixedReadings(fixedReadings);
+  }
+
+  updateMimeticWords(mimeticWords: MimeticWordMap) {
+    this.setMimeticWords(mimeticWords);
+  }
+
+  getMimeticEntry(text: string): MimeticWordEntry | null {
+    return this.mimeticWordMap.get(text.trim()) ?? null;
   }
 
   async process(text: string, context: ConvertContext = DEFAULT_CONTEXT): Promise<string> {
@@ -207,6 +226,13 @@ class FuriganaProcessor {
       if (fixedMatch) {
         html += this.renderRuby(fixedMatch.text, fixedMatch.reading);
         cursor += fixedMatch.text.length;
+        continue;
+      }
+
+      const mimeticMatch = this.matchMimeticWordAt(text, cursor);
+      if (mimeticMatch) {
+        html += this.renderMimeticRuby(mimeticMatch.text, mimeticMatch.entry);
+        cursor += mimeticMatch.text.length;
         continue;
       }
 
@@ -315,6 +341,17 @@ class FuriganaProcessor {
 
       const reading = this.fixedReadingMap.get(key);
       if (reading) return { text: key, reading };
+    }
+
+    return null;
+  }
+
+  private matchMimeticWordAt(text: string, cursor: number): { text: string; entry: MimeticWordEntry } | null {
+    for (const key of this.mimeticWordKeys) {
+      if (!text.startsWith(key, cursor)) continue;
+
+      const entry = this.mimeticWordMap.get(key);
+      if (entry) return { text: key, entry };
     }
 
     return null;
@@ -682,6 +719,11 @@ class FuriganaProcessor {
     this.fixedReadingKeys = Object.keys(fixedReadings).sort((a, b) => b.length - a.length);
   }
 
+  private setMimeticWords(mimeticWords: MimeticWordMap) {
+    this.mimeticWordMap = new Map(Object.entries(mimeticWords));
+    this.mimeticWordKeys = Object.keys(mimeticWords).sort((a, b) => b.length - a.length);
+  }
+
   private setOverridesCache(value: unknown) {
     this.overridesCache = this.normalizeOverrides(value);
     this.sortedOverridesCache = [...this.overridesCache].sort((a, b) => b.text.length - a.text.length);
@@ -727,6 +769,14 @@ class FuriganaProcessor {
     return `<ruby${tagAttribute}${alternativeAttribute}>${text}<rt>${wanakana.toHiragana(this.normalizeReading(reading))}</rt></ruby>`;
   }
 
+  private renderMimeticRuby(text: string, entry: MimeticWordEntry): string {
+    const readingAttribute = entry.reading ? ` data-mimetic-reading="${this.escapeAttribute(entry.reading)}"` : '';
+    const tagAttribute = entry.tags?.length ? ` data-mimetic-tags="${this.escapeAttribute(entry.tags.join(' '))}"` : '';
+    const titleAttribute = entry.meaning ? ` title="${this.escapeAttribute(entry.meaning)}"` : '';
+
+    return `<ruby data-reading-tags="mimetic" data-mimetic-meaning="${this.escapeAttribute(entry.meaning)}"${readingAttribute}${tagAttribute}${titleAttribute}>${text}<rt>${this.escapeAttribute(entry.meaning)}</rt></ruby>`;
+  }
+
   private escapeAttribute(value: string): string {
     return value
       .replace(/&/g, '&amp;')
@@ -743,6 +793,7 @@ class FuriganaService {
   private familyNameReadings: FixedReadingMap = {};
   private familyNames = new Set<string>();
   private localFixedReadings: FixedReadingMap = {};
+  private mimeticWords: MimeticWordMap = {};
   private remotePatchCompounds: FixedReadingMap = {};
   private remotePatchChars: KanjiDict = {};
   private isLoaded = false;
@@ -756,15 +807,17 @@ class FuriganaService {
 
     this.initPromise = (async () => {
       try {
-        const [dictResponse, localFixedResponse, familyNamesResponse] = await Promise.all([
+        const [dictResponse, localFixedResponse, familyNamesResponse, mimeticWordsResponse] = await Promise.all([
           fetch(browser.runtime.getURL('/json/kanji-jouyou.json')),
           fetch(browser.runtime.getURL('/json/fixed-readings.json')),
           fetch(browser.runtime.getURL('/json/family-names.json')),
+          fetch(browser.runtime.getURL('/json/mimetic-words.json')),
         ]);
 
         this.baseDict = await dictResponse.json();
         this.localFixedReadings = await localFixedResponse.json();
         this.familyNameReadings = await familyNamesResponse.json();
+        this.mimeticWords = await mimeticWordsResponse.json();
         this.familyNames = new Set(Object.keys(this.familyNameReadings));
         this.dict = { ...this.baseDict };
         await this.loadCachedRemotePatch();
@@ -800,6 +853,11 @@ class FuriganaService {
 
   isPlaceOrName(text: string): boolean {
     return this.getEntityType(text) !== null;
+  }
+
+  getMimeticEntry(text: string): MimeticWordEntry | null {
+    this.ensureProcessor();
+    return this.processor!.getMimeticEntry(text);
   }
 
   baseConvert(segment: string): string {
@@ -838,6 +896,7 @@ class FuriganaService {
         this.dict,
         this.cityDict,
         this.getMergedFixedReadings(),
+        this.mimeticWords,
         NUMERIC_COUNTER_READING_MAP,
         (segment) => this.baseConvert(segment),
       );
@@ -846,6 +905,7 @@ class FuriganaService {
 
     this.processor.updateDict(this.dict);
     this.processor.updateFixedReadings(this.getMergedFixedReadings());
+    this.processor.updateMimeticWords(this.mimeticWords);
   }
 
   private getMergedFixedReadings(): FixedReadingMap {

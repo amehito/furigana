@@ -1,0 +1,260 @@
+{
+  "schemaVersion": 1,
+  "items": [
+    {
+      "id": "n5-a-ato-ni-ato-de",
+      "level": "N5",
+      "kanaIndex": "あ",
+      "title": "後に / 後で",
+      "patterns": ["Vた + 後に", "Vた + 後で", "Nの + 後に", "Nの + 後で"],
+      "translation": "在……之后；做完……以后",
+      "explanation": "表示某个动作或事件结束之后，再发生后面的动作。後で更常用于口语，後に语气稍正式。",
+      "formation": "动词た形或名词の后接後に/後で。",
+      "examples": [
+        { "sentence": "宿題をした後で、ゲームをします。", "translation": "做完作业以后玩游戏。" },
+        { "sentence": "授業の後に、図書館へ行きます。", "translation": "下课后去图书馆。" }
+      ],
+      "tags": ["time", "sequence"]
+    },
+    {
+      "id": "n5-ga-hoshii-hoshigaru",
+      "level": "N5",
+      "kanaIndex": "が",
+      "title": "が欲しい / は欲しくない / を欲しがる / を欲しがっている",
+      "patterns": ["Nが欲しい", "Nは欲しくない", "Nを欲しがる", "Nを欲しがっている"],
+      "translation": "想要……；不想要……；别人想要……",
+      "explanation": "欲しい通常用于说话人自己的愿望；描述第三人称想要某物时，用欲しがる或欲しがっている。",
+      "formation": "想要的对象常用が；否定对比时可用は；第三人称愿望用を + 欲しがる。",
+      "examples": [
+        { "sentence": "私は新しい辞書が欲しいです。", "translation": "我想要一本新词典。" },
+        { "sentence": "弟はおもちゃを欲しがっています。", "translation": "弟弟正想要玩具。" }
+      ],
+      "tags": ["desire", "adjective"]
+    },
+    {
+      "id": "n5-shi-tai-tagaru",
+      "level": "N5",
+      "kanaIndex": "し",
+      "title": "したい / したくない / したがる / したがっている",
+      "patterns": ["Vます stem + たい", "Vます stem + たくない", "Vます stem + たがる", "Vます stem + たがっている"],
+      "translation": "想做……；不想做……；别人想做……",
+      "explanation": "たい用于表达自己的愿望或直接询问对方愿望；描述第三人称想做某事时，用たがる或たがっている。",
+      "formation": "去掉ます后的动词词干接たい/たくない/たがる。",
+      "examples": [
+        { "sentence": "日本へ行きたいです。", "translation": "我想去日本。" },
+        { "sentence": "子どもは外で遊びたがっています。", "translation": "孩子想去外面玩。" }
+      ],
+      "tags": ["desire", "verb"]
+    },
+    {
+      "id": "n5-da-dake",
+      "level": "N5",
+      "kanaIndex": "だ",
+      "title": "だけ",
+      "patterns": ["Nだけ", "V plain + だけ", "いA plain + だけ", "なAな + だけ"],
+      "translation": "只；仅仅；只有……",
+      "explanation": "表示范围被限定在某个数量、人、事物或动作上，强调没有其他内容。",
+      "formation": "接在名词、动词普通形或形容词后。",
+      "examples": [
+        { "sentence": "水だけ飲みます。", "translation": "只喝水。" },
+        { "sentence": "見るだけです。", "translation": "只是看看。" }
+      ],
+      "tags": ["limit", "particle"]
+    },
+    {
+      "id": "n5-te-te-kara",
+      "level": "N5",
+      "kanaIndex": "て",
+      "title": "てから",
+      "patterns": ["Vて + から"],
+      "translation": "做完……之后再……",
+      "explanation": "强调先完成前面的动作，再进行后面的动作。前后顺序很明确。",
+      "formation": "动词て形后接から。",
+      "examples": [
+        { "sentence": "朝ご飯を食べてから、学校へ行きます。", "translation": "吃完早饭后去学校。" },
+        { "sentence": "手を洗ってから、ご飯を食べてください。", "translation": "请洗手后再吃饭。" }
+      ],
+      "tags": ["time", "sequence"]
+    },
+    {
+      "id": "n5-te-kudasai-choudai-naide-kudasai-kure",
+      "level": "N5",
+      "kanaIndex": "て",
+      "title": "てください / てちょうだい / ないでください / ないでちょうだい / てくれ",
+      "patterns": ["Vて + ください", "Vて + ちょうだい", "Vないで + ください", "Vないで + ちょうだい", "Vて + くれ"],
+      "translation": "请做……；请不要做……；给我做……",
+      "explanation": "用于请求别人做或不要做某事。ください较礼貌；ちょうだい较口语，多用于亲近关系；くれ较直接，常用于男性口吻或亲近关系。",
+      "formation": "肯定请求用动词て形；否定请求用动词ない形 + で。",
+      "examples": [
+        { "sentence": "ここに名前を書いてください。", "translation": "请在这里写名字。" },
+        { "sentence": "写真を撮らないでください。", "translation": "请不要拍照。" }
+      ],
+      "tags": ["request", "imperative"]
+    },
+    {
+      "id": "n5-de-desu-dewa-arimasen",
+      "level": "N5",
+      "kanaIndex": "で",
+      "title": "です / ではありません / でした / ではありませんでした",
+      "patterns": ["Nです", "Nではありません", "Nでした", "Nではありませんでした", "なAです", "なAではありません"],
+      "translation": "是……；不是……；过去是……；过去不是……",
+      "explanation": "名词句和な形容词句的礼貌判断形式。ではありません也常说成じゃありません。",
+      "formation": "名词或な形容词词干后接です及其否定、过去形式。",
+      "examples": [
+        { "sentence": "私は学生です。", "translation": "我是学生。" },
+        { "sentence": "昨日は休みではありませんでした。", "translation": "昨天不是休息日。" }
+      ],
+      "tags": ["copula", "polite"]
+    },
+    {
+      "id": "n5-to-to",
+      "level": "N5",
+      "kanaIndex": "と",
+      "title": "と",
+      "patterns": ["NとN", "Nと + V", "sentence + と言います"],
+      "translation": "和；跟；引用“……”",
+      "explanation": "と可以连接名词表示并列，也可以表示一起做动作的对象；还可用于引用说话或想法内容。",
+      "formation": "接在名词或被引用的句子后。",
+      "examples": [
+        { "sentence": "母と買い物に行きます。", "translation": "和妈妈去买东西。" },
+        { "sentence": "先生は「おはよう」と言いました。", "translation": "老师说了“早上好”。" }
+      ],
+      "tags": ["particle", "quotation"]
+    },
+    {
+      "id": "n5-na-naide-zuni",
+      "level": "N5",
+      "kanaIndex": "な",
+      "title": "ないで / ずに",
+      "patterns": ["Vないで", "Vない stem + ずに", "する -> せずに"],
+      "translation": "不做……就……；没有……而……",
+      "explanation": "表示在不进行前项动作的状态下进行后项动作。ずに比ないで更书面。",
+      "formation": "ないで接动词ない形；ずに接ない形去ない后的词干，する变せずに。",
+      "examples": [
+        { "sentence": "朝ご飯を食べないで学校へ行きました。", "translation": "没吃早饭就去学校了。" },
+        { "sentence": "辞書を使わずに読みました。", "translation": "没有用词典就读了。" }
+      ],
+      "tags": ["negative", "state"]
+    },
+    {
+      "id": "n5-na-nagara",
+      "level": "N5",
+      "kanaIndex": "な",
+      "title": "ながら",
+      "patterns": ["Vます stem + ながら"],
+      "translation": "一边……一边……",
+      "explanation": "表示两个动作同时进行。句子的重点通常在后面的动作。",
+      "formation": "去掉ます后的动词词干接ながら。",
+      "examples": [
+        { "sentence": "音楽を聞きながら勉強します。", "translation": "一边听音乐一边学习。" },
+        { "sentence": "歩きながら話しました。", "translation": "一边走一边说话。" }
+      ],
+      "tags": ["simultaneous", "verb"]
+    },
+    {
+      "id": "n5-ni-ni-suru-ku-suru",
+      "level": "N5",
+      "kanaIndex": "に",
+      "title": "にする / くする",
+      "patterns": ["Nにする", "なAにする", "いAくする"],
+      "translation": "决定为……；把……弄成……",
+      "explanation": "表示选择、决定，或人为地让状态发生变化。い形容词用くする，名词和な形容词用にする。",
+      "formation": "名词/な形容词词干 + にする；い形容词去い + くする。",
+      "examples": [
+        { "sentence": "飲み物はお茶にします。", "translation": "饮料我选茶。" },
+        { "sentence": "部屋を明るくします。", "translation": "把房间弄亮。" }
+      ],
+      "tags": ["change", "choice"]
+    },
+    {
+      "id": "n5-ni-ni-naru-ku-naru",
+      "level": "N5",
+      "kanaIndex": "に",
+      "title": "になる / くなる",
+      "patterns": ["Nになる", "なAになる", "いAくなる"],
+      "translation": "变成……；变得……",
+      "explanation": "表示自然变化或结果状态。い形容词用くなる，名词和な形容词用になる。",
+      "formation": "名词/な形容词词干 + になる；い形容词去い + くなる。",
+      "examples": [
+        { "sentence": "春になりました。", "translation": "到春天了。" },
+        { "sentence": "日本語が少し分かるようになりました。", "translation": "变得稍微懂日语了。" }
+      ],
+      "tags": ["change", "result"]
+    },
+    {
+      "id": "n5-no-node-nde",
+      "level": "N5",
+      "kanaIndex": "の",
+      "title": "ので / んで",
+      "patterns": ["plain form + ので", "Nな + ので", "なAな + ので", "plain form + んで"],
+      "translation": "因为……所以……",
+      "explanation": "表示原因理由。ので语气比から更柔和，常用于说明客观原因；んで是口语缩略。",
+      "formation": "普通形后接ので；名词和な形容词现在肯定形要接なので。",
+      "examples": [
+        { "sentence": "雨が降っているので、出かけません。", "translation": "因为在下雨，所以不出门。" },
+        { "sentence": "今日は休みなので、家にいます。", "translation": "因为今天休息，所以在家。" }
+      ],
+      "tags": ["reason", "conjunction"]
+    },
+    {
+      "id": "n5-ma-mashou-mashouka",
+      "level": "N5",
+      "kanaIndex": "ま",
+      "title": "ましょう / ましょうか",
+      "patterns": ["Vます stem + ましょう", "Vます stem + ましょうか"],
+      "translation": "一起……吧；我来……吧？",
+      "explanation": "ましょう用于提议一起做某事；ましょうか可以表示提议，也可表示主动提出帮忙。",
+      "formation": "去掉ます后的动词词干接ましょう/ましょうか。",
+      "examples": [
+        { "sentence": "一緒に帰りましょう。", "translation": "一起回去吧。" },
+        { "sentence": "荷物を持ちましょうか。", "translation": "我来帮你拿行李吧？" }
+      ],
+      "tags": ["invitation", "offer"]
+    },
+    {
+      "id": "n5-ma-masenka",
+      "level": "N5",
+      "kanaIndex": "ま",
+      "title": "ませんか",
+      "patterns": ["Vます stem + ませんか"],
+      "translation": "要不要……？；不……吗？",
+      "explanation": "用于礼貌地邀请对方一起做某事，比直接说ましょうか更像是在询问对方意愿。",
+      "formation": "去掉ます后的动词词干接ませんか。",
+      "examples": [
+        { "sentence": "一緒に映画を見ませんか。", "translation": "要不要一起看电影？" },
+        { "sentence": "少し休みませんか。", "translation": "要不要稍微休息一下？" }
+      ],
+      "tags": ["invitation", "question"]
+    },
+    {
+      "id": "n5-ma-mae-ni-mae-de",
+      "level": "N5",
+      "kanaIndex": "ま",
+      "title": "前に / 前で",
+      "patterns": ["V dictionary + 前に", "Nの + 前に", "Nの + 前で"],
+      "translation": "在……之前；在……前面",
+      "explanation": "前に表示时间上的之前；前で表示地点上的前面。动词接前に时用辞书形。",
+      "formation": "动作之前用动词辞书形 + 前に；名词之前用Nの前に；地点前方用Nの前で。",
+      "examples": [
+        { "sentence": "寝る前に、歯を磨きます。", "translation": "睡觉前刷牙。" },
+        { "sentence": "駅の前で友だちを待ちます。", "translation": "在车站前面等朋友。" }
+      ],
+      "tags": ["time", "location"]
+    },
+    {
+      "id": "n5-wo-kudasai-choudai-kure",
+      "level": "N5",
+      "kanaIndex": "を",
+      "title": "を下さい / をちょうだい / をくれ",
+      "patterns": ["Nをください", "Nをちょうだい", "Nをくれ"],
+      "translation": "请给我……；给我……",
+      "explanation": "用于请求别人给自己某物。ください较礼貌；ちょうだい较口语、亲近；くれ较直接。",
+      "formation": "想要得到的物品后接をください/をちょうだい/をくれ。",
+      "examples": [
+        { "sentence": "水をください。", "translation": "请给我水。" },
+        { "sentence": "その資料をちょうだい。", "translation": "请把那边的资料给我。" }
+      ],
+      "tags": ["request", "object"]
+    }
+  ]
+}
