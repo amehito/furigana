@@ -5,7 +5,7 @@ export default defineConfig({
   modules: ['@wxt-dev/module-react'],
   manifest: {
     web_accessible_resources: [{
-      resources: ["json/kanji-jouyou.json","json/fixed-readings.json","json/family-names.json","json/mimetic-words.json"],
+      resources: ["json/kanji-jouyou.json","json/fixed-readings.json","json/family-names.json","json/given-names.json","json/mimetic-words.json"],
       matches: ["<all_urls>"]
     }],
     host_permissions: ['https://cdn.jsdelivr.net/*'],

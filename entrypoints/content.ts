@@ -21,6 +21,7 @@ import {
   type TranslatorEngine,
 } from '../types/settings';
 import { ErrorReportModal } from './components/ErrorReportModal';
+import type { MimeticWordEntry } from '../util/common';
 
 const divName = 'my-floating-popup';
 const styleId = 'furigana-dynamic-style';
@@ -617,8 +618,9 @@ export default defineContentScript({
       const fav = await isFavorite(text);
       const favoriteItems = await getFavorites();
       const inboxFull = !fav && favoriteItems.length >= FAVORITES_LIMIT;
+      const mimeticNote = mimeticEntry ? buildMimeticNote(mimeticEntry) : '';
       const tagLabel = mimeticEntry
-        ? '拟声拟态'
+        ? '拟态词'
         : entityType === 'place'
         ? '地名'
         : entityType === 'person'
@@ -629,12 +631,13 @@ export default defineContentScript({
 
       overlay.innerHTML = `
         <div class="word-card">
-          ${buildCardHeader(tagLabel, rubyHtml)}
+          ${buildCardHeader(tagLabel, mimeticEntry ? '' : rubyHtml)}
           <div class="card-furigana-row">
             <div class="card-furigana">
             ${rubyHtml}
             </div>
           </div>
+          ${mimeticNote}
           ${polyphonicNotice}
           <div class="word-card-bottom-actions">
             <button aria-label="翻译" class="word-card-btn icon-btn translate-btn" title="翻译" type="button">${buildButtonContent(audioIcons.translate, '')}</button>
@@ -819,6 +822,26 @@ function escapeHtml(value: string) {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
+}
+
+function buildMimeticNote(entry: MimeticWordEntry) {
+  const reading = entry.reading ? `<span class="oye-mimetic-reading">${escapeHtml(entry.reading)}</span>` : '';
+  const tags = entry.tags?.length
+    ? `<div class="oye-mimetic-tags">${entry.tags.map((tag) => `<span>${escapeHtml(tag)}</span>`).join('')}</div>`
+    : '';
+  const example = entry.example ? `<p class="oye-mimetic-example">${escapeHtml(entry.example)}</p>` : '';
+
+  return `
+    <div class="oye-mimetic-note">
+      <div class="oye-mimetic-note-head">
+        <span class="oye-mimetic-label">释义</span>
+        ${reading}
+      </div>
+      <p class="oye-mimetic-meaning">${escapeHtml(entry.meaning)}</p>
+      ${tags}
+      ${example}
+    </div>
+  `;
 }
 
 function setAudioButtonState(button: HTMLButtonElement | null | undefined, loading: boolean) {

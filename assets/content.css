@@ -184,6 +184,74 @@
   margin-bottom: 16px;
 }
 
+#my-floating-popup .oye-mimetic-note {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  gap: 8px;
+  margin: -4px 0 14px;
+  padding: 12px 13px;
+  border-radius: 8px;
+  background: rgba(247, 250, 252, 0.72);
+  border: 1px solid rgba(107, 121, 146, 0.14);
+  color: rgba(37, 51, 69, 0.9);
+}
+
+#my-floating-popup .oye-mimetic-note-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+#my-floating-popup .oye-mimetic-label {
+  font-size: 12px;
+  line-height: 1.2;
+  color: rgba(91, 104, 126, 0.68);
+}
+
+#my-floating-popup .oye-mimetic-reading {
+  font-size: 12px;
+  line-height: 1.2;
+  color: rgba(37, 51, 69, 0.72);
+}
+
+#my-floating-popup .oye-mimetic-meaning,
+#my-floating-popup .oye-mimetic-example {
+  margin: 0;
+  white-space: normal;
+  word-break: break-word;
+}
+
+#my-floating-popup .oye-mimetic-meaning {
+  font-size: 14px;
+  line-height: 1.45;
+  font-weight: 560;
+}
+
+#my-floating-popup .oye-mimetic-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+#my-floating-popup .oye-mimetic-tags span {
+  padding: 3px 7px;
+  border-radius: 999px;
+  font-size: 11px;
+  line-height: 1.2;
+  color: rgba(91, 104, 126, 0.82);
+  background: rgba(236, 242, 248, 0.78);
+  border: 1px solid rgba(107, 121, 146, 0.1);
+}
+
+#my-floating-popup .oye-mimetic-example {
+  padding-top: 2px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: rgba(91, 104, 126, 0.82);
+}
+
 #my-floating-popup .oye-reading-notices {
   position: relative;
   z-index: 1;

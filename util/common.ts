@@ -792,6 +792,8 @@ class FuriganaService {
   private cityDict: Record<string, string> = JAPAN_CITY_MAP;
   private familyNameReadings: FixedReadingMap = {};
   private familyNames = new Set<string>();
+  private givenNameReadings: FixedReadingMap = {};
+  private givenNames = new Set<string>();
   private localFixedReadings: FixedReadingMap = {};
   private mimeticWords: MimeticWordMap = {};
   private remotePatchCompounds: FixedReadingMap = {};
@@ -807,18 +809,21 @@ class FuriganaService {
 
     this.initPromise = (async () => {
       try {
-        const [dictResponse, localFixedResponse, familyNamesResponse, mimeticWordsResponse] = await Promise.all([
+        const [dictResponse, localFixedResponse, familyNamesResponse, givenNamesResponse, mimeticWordsResponse] = await Promise.all([
           fetch(browser.runtime.getURL('/json/kanji-jouyou.json')),
           fetch(browser.runtime.getURL('/json/fixed-readings.json')),
           fetch(browser.runtime.getURL('/json/family-names.json')),
+          fetch(browser.runtime.getURL('/json/given-names.json')),
           fetch(browser.runtime.getURL('/json/mimetic-words.json')),
         ]);
 
         this.baseDict = await dictResponse.json();
         this.localFixedReadings = await localFixedResponse.json();
         this.familyNameReadings = await familyNamesResponse.json();
+        this.givenNameReadings = await givenNamesResponse.json();
         this.mimeticWords = await mimeticWordsResponse.json();
         this.familyNames = new Set(Object.keys(this.familyNameReadings));
+        this.givenNames = new Set(Object.keys(this.givenNameReadings));
         this.dict = { ...this.baseDict };
         await this.loadCachedRemotePatch();
         this.ensureProcessor();
@@ -843,7 +848,7 @@ class FuriganaService {
     if (!normalized) return null;
 
     const isPlace = Boolean(this.cityDict[normalized]);
-    const isPerson = this.familyNames.has(normalized);
+    const isPerson = this.familyNames.has(normalized) || this.givenNames.has(normalized);
 
     if (isPlace && isPerson) return 'place-or-person';
     if (isPlace) return 'place';
@@ -912,8 +917,15 @@ class FuriganaService {
     return {
       ...this.localFixedReadings,
       ...this.familyNameReadings,
+      ...this.getAnnotatableGivenNameReadings(),
       ...this.remotePatchCompounds,
     };
+  }
+
+  private getAnnotatableGivenNameReadings(): FixedReadingMap {
+    return Object.fromEntries(
+      Object.entries(this.givenNameReadings).filter(([name]) => name.length > 1 && KANJI_PATTERN.test(name)),
+    );
   }
 
   private async loadCachedRemotePatch() {

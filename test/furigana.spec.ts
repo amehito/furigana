@@ -21,6 +21,7 @@ type SpecialCasesPayload = {
 const LOCAL_DICT = readJsonFixture('../public/json/kanji-jouyou.json');
 const LOCAL_FIXED_READINGS = readJsonFixture('../public/json/fixed-readings.json');
 const LOCAL_FAMILY_NAMES = readJsonFixture('../public/json/family-names.json');
+const LOCAL_GIVEN_NAMES = readJsonFixture('../public/json/given-names.json');
 const LOCAL_MIMETIC_WORDS = readJsonFixture('../public/json/mimetic-words.json');
 
 const CDN_VERSION_URL = 'https://cdn.jsdelivr.net/gh/amehito/japanese-dict-patch@main/version.json';
@@ -42,6 +43,7 @@ function setupFetchMock(options?: {
   localDict?: unknown;
   localFixedReadings?: unknown;
   localFamilyNames?: unknown;
+  localGivenNames?: unknown;
   localMimeticWords?: unknown;
   versionPayload?: PatchVersionPayload;
   specialCasesPayload?: SpecialCasesPayload;
@@ -50,6 +52,7 @@ function setupFetchMock(options?: {
     localDict = LOCAL_DICT,
     localFixedReadings = LOCAL_FIXED_READINGS,
     localFamilyNames = LOCAL_FAMILY_NAMES,
+    localGivenNames = LOCAL_GIVEN_NAMES,
     localMimeticWords = LOCAL_MIMETIC_WORDS,
     versionPayload = { version: '20260329.01', min_app_version: '1.0.0', last_updated: '2026-03-29' },
     specialCasesPayload = { version: '20260329.01', compounds: {}, patch_chars: {} },
@@ -61,6 +64,7 @@ function setupFetchMock(options?: {
     if (url.includes('/json/kanji-jouyou.json')) return createJsonResponse(localDict);
     if (url.includes('/json/fixed-readings.json')) return createJsonResponse(localFixedReadings);
     if (url.includes('/json/family-names.json')) return createJsonResponse(localFamilyNames);
+    if (url.includes('/json/given-names.json')) return createJsonResponse(localGivenNames);
     if (url.includes('/json/mimetic-words.json')) return createJsonResponse(localMimeticWords);
     if (url === CDN_VERSION_URL) return createJsonResponse(versionPayload);
     if (url === CDN_SPECIAL_CASES_URL) return createJsonResponse(specialCasesPayload);
@@ -199,6 +203,15 @@ describe('furiganaService.convert', () => {
     expect(html).not.toContain('possible_polyphonic');
   });
 
+  it('annotates maintained common given names', async () => {
+    setupFetchMock();
+    const service = await importFreshService();
+
+    const html = await service.convert('小百合', { prev: '', next: '' });
+
+    expectRubyReadingsToMatch(extractRubyReadings(html), ['さゆり']);
+  });
+
   it('marks okurigana readings with multiple matching kun candidates as polyphonic', async () => {
     setupFetchMock();
     const service = await importFreshService();
@@ -248,7 +261,11 @@ describe('furiganaService.convert', () => {
 describe('furiganaService entity typing', () => {
   it.each([
     { input: '田中', expected: 'person' },
+    { input: 'ひまり', expected: 'person' },
     { input: '新宿', expected: 'place' },
+    { input: '札幌駅', expected: 'place' },
+    { input: '山手線', expected: 'place' },
+    { input: '道頓堀', expected: 'place' },
     { input: 'あいう', expected: null },
   ])('classifies $input as $expected', async ({ input, expected }) => {
     setupFetchMock();
@@ -256,6 +273,19 @@ describe('furiganaService entity typing', () => {
     await service.init();
 
     expect(service.getEntityType(input)).toBe(expected);
+  });
+
+  it.each([
+    { input: '札幌駅', expected: 'さっぽろえき' },
+    { input: '山手線', expected: 'やまのてせん' },
+    { input: '道頓堀', expected: 'どうとんぼり' },
+  ])('annotates maintained place name $input', async ({ input, expected }) => {
+    setupFetchMock();
+    const service = await importFreshService();
+
+    const html = await service.convert(input, { prev: '', next: '' });
+
+    expectRubyReadingsToMatch(extractRubyReadings(html), [expected]);
   });
 });
 
