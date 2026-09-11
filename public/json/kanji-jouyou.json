@@ -3899,6 +3899,21 @@
         "wk_readings_kun": ["こた"],
         "wk_radicals": ["Bamboo","Suit"]
     },
+    "脆": {
+        "strokes": 12,
+        "grade": 2,
+        "freq": 1223,
+        "jlpt_old": 2,
+        "jlpt_new": 3,
+        "meanings": ["Brittle","Fragile","Weak"],
+        "readings_on": ["ぜい"],
+        "readings_kun": ["もろ.い"],
+        "wk_level": 8,
+        "wk_meanings": ["Fragile"],
+        "wk_readings_on": ["ぜい"],
+        "wk_readings_kun": ["!もろ"],
+        "wk_radicals": ["Body","Slide"]
+    },
     "撫": {
         "strokes": 12,
         "grade": 2,
