@@ -1,7 +1,6 @@
 # Furigana Extension
 
-<!-- Project screenshot / demo image placeholder -->
-<!-- Add your image here, for example: ![Furigana Extension demo](./docs/demo.png) -->
+<img width="906" height="1228" alt="image" src="https://github.com/user-attachments/assets/49a109b2-d305-4ae1-982a-6f2066ef2c70" />
 
 ---
 
